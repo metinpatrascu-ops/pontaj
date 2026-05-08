@@ -1,0 +1,532 @@
+<!DOCTYPE html>
+<html lang="ro">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sistem Pontaj Echipa</title>
+    <!-- Tailwind CSS pentru design -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Lucide Icons -->
+    <script src="https://unpkg.com/lucide@latest"></script>
+    
+    <style>
+        /* CSS adițional pentru animații simple și detalii care nu sunt direct în Tailwind */
+        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; }
+        .pulse-ring {
+            animation: pulse-ring 2s cubic-bezier(0.215, 0.61, 0.355, 1) infinite;
+        }
+        @keyframes pulse-ring {
+            0% { transform: scale(0.8); opacity: 0.5; }
+            80%, 100% { transform: scale(2.5); opacity: 0; }
+        }
+        .hidden { display: none !important; }
+    </style>
+</head>
+<body class="bg-slate-50 text-slate-800 min-h-screen pb-12">
+
+    <!-- Ecran de Încărcare -->
+    <div id="loadingScreen" class="fixed inset-0 bg-slate-50 flex items-center justify-center z-50">
+        <div class="animate-pulse flex flex-col items-center">
+            <i data-lucide="clock" class="w-10 h-10 text-blue-500 mb-4 animate-spin"></i>
+            <p class="text-slate-500 font-medium">Se încarcă sistemul...</p>
+        </div>
+    </div>
+
+    <!-- Ecran Setare Nume (Prima conectare) -->
+    <div id="setNameScreen" class="fixed inset-0 bg-slate-50 flex items-center justify-center p-4 z-40 hidden">
+        <div class="bg-white p-8 rounded-2xl shadow-xl max-w-md w-full">
+            <div class="flex justify-center mb-6">
+                <div class="bg-blue-100 p-4 rounded-full">
+                    <i data-lucide="user" class="w-10 h-10 text-blue-600"></i>
+                </div>
+            </div>
+            <h1 class="text-2xl font-bold text-center text-slate-800 mb-2">Bine ai venit!</h1>
+            <p class="text-slate-500 text-center mb-8">Pentru a putea folosi sistemul de pontaj, te rugăm să îți introduci numele complet.</p>
+            <form id="setNameForm" class="space-y-4">
+                <div>
+                    <input type="text" id="userNameInput" placeholder="Ex: Popescu Ion" class="w-full px-4 py-3 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all text-slate-800" required>
+                </div>
+                <button type="submit" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-semibold py-3 px-4 rounded-xl transition-colors duration-200">
+                    Continuă
+                </button>
+            </form>
+        </div>
+    </div>
+
+    <!-- Aplicația Principală (Dashboard) -->
+    <div id="appScreen" class="hidden">
+        <!-- Header -->
+        <header class="bg-white border-b border-slate-200 sticky top-0 z-10">
+            <div class="max-w-5xl mx-auto px-4 h-16 flex items-center justify-between">
+                <div class="flex items-center space-x-2">
+                    <i data-lucide="clock" class="w-6 h-6 text-blue-600"></i>
+                    <span class="font-bold text-lg hidden sm:block">Sistem Pontaj</span>
+                </div>
+                <div class="flex items-center space-x-4">
+                    <div class="text-right">
+                        <p id="currentDateDisplay" class="text-sm text-slate-500"></p>
+                        <p id="currentTimeDisplay" class="font-bold font-mono text-lg"></p>
+                    </div>
+                </div>
+            </div>
+        </header>
+
+        <main class="max-w-5xl mx-auto px-4 mt-8 space-y-8">
+            
+            <!-- Secțiunea Personală (Panou de control pentru check-in) -->
+            <section class="bg-white rounded-3xl p-6 md:p-8 shadow-sm border border-slate-100 flex flex-col md:flex-row items-center justify-between gap-6">
+                <div class="flex items-center space-x-4 w-full md:w-auto justify-center md:justify-start">
+                    <div id="myAvatar" class="w-16 h-16 rounded-full flex items-center justify-center text-white bg-slate-300 shadow-lg transition-colors duration-500 relative">
+                        <i data-lucide="user" class="w-8 h-8 relative z-10"></i>
+                        <div id="myAvatarPulse" class="absolute inset-0 rounded-full bg-green-400 opacity-0 pulse-ring hidden"></div>
+                    </div>
+                    <div>
+                        <h2 id="myNameDisplay" class="text-2xl font-bold text-slate-800 text-center md:text-left">...</h2>
+                        <div class="flex items-center space-x-2 mt-1 justify-center md:justify-start">
+                            <span class="relative flex h-3 w-3">
+                                <span id="myStatusDotPing" class="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75 hidden"></span>
+                                <span id="myStatusDot" class="relative inline-flex rounded-full h-3 w-3 bg-slate-400"></span>
+                            </span>
+                            <span id="myStatusText" class="font-medium text-slate-500">
+                                Ești plecat / Nu ai intrat azi
+                            </span>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="w-full md:w-auto flex flex-col sm:flex-row gap-3">
+                    <button id="btnCheckIn" class="w-full flex items-center justify-center space-x-2 bg-green-600 hover:bg-green-700 text-white px-8 py-4 rounded-xl font-bold text-lg shadow-lg shadow-green-200 transition-all hover:-translate-y-1">
+                        <i data-lucide="log-in" class="w-6 h-6"></i>
+                        <span>Check In (Intrare)</span>
+                    </button>
+                    <button id="btnCheckOut" class="hidden w-full flex items-center justify-center space-x-2 bg-rose-500 hover:bg-rose-600 text-white px-8 py-4 rounded-xl font-bold text-lg shadow-lg shadow-rose-200 transition-all hover:-translate-y-1">
+                        <i data-lucide="log-out" class="w-6 h-6"></i>
+                        <span>Check Out (Ieșire)</span>
+                    </button>
+                </div>
+            </section>
+
+            <!-- Status Echipa Curentă -->
+            <section class="space-y-6">
+                <div class="flex items-center justify-between border-b border-slate-200 pb-2">
+                    <h3 class="text-xl font-bold text-slate-800 flex items-center space-x-2">
+                        <i data-lucide="users" class="w-6 h-6 text-blue-500"></i>
+                        <span>Status Colegi Azi</span>
+                    </h3>
+                    <span id="activeCountBadge" class="bg-blue-100 text-blue-800 text-xs font-bold px-3 py-1 rounded-full">0 prezenți</span>
+                </div>
+
+                <div id="emptyStaffMessage" class="bg-white rounded-2xl p-8 text-center border border-slate-100 hidden">
+                    <i data-lucide="calendar" class="w-12 h-12 text-slate-300 mx-auto mb-3"></i>
+                    <p class="text-slate-500 font-medium">Ești singurul din echipă conectat momentan.</p>
+                    <p class="text-slate-400 text-sm">Când colegii se vor loga, vor apărea aici.</p>
+                </div>
+
+                <div id="staffGrid" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                    <!-- Membrii echipei vor fi injectați aici via JavaScript -->
+                </div>
+            </section>
+
+            <!-- Secțiunea Istoric -->
+            <section class="space-y-6 pt-8 border-t border-slate-200">
+                <div class="flex items-center justify-between border-b border-slate-200 pb-2">
+                    <h3 class="text-xl font-bold text-slate-800 flex items-center space-x-2">
+                        <i data-lucide="history" class="w-6 h-6 text-indigo-500"></i>
+                        <span>Istoric Pontaj (Zile Anterioare)</span>
+                    </h3>
+                </div>
+
+                <div class="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden">
+                    <div class="overflow-x-auto">
+                        <table class="w-full text-left text-sm text-slate-600">
+                            <thead class="bg-slate-50 text-slate-700 font-semibold border-b border-slate-200">
+                                <tr>
+                                    <th class="px-6 py-4">Data</th>
+                                    <th class="px-6 py-4">Nume</th>
+                                    <th class="px-6 py-4">Intrare</th>
+                                    <th class="px-6 py-4">Ieșire</th>
+                                    <th class="px-6 py-4">Timp Total</th>
+                                </tr>
+                            </thead>
+                            <tbody id="historyTableBody" class="divide-y divide-slate-100">
+                                <!-- Istoricul va fi injectat aici via JavaScript -->
+                                <tr>
+                                    <td colspan="5" class="px-6 py-8 text-center text-slate-400">
+                                        Se încarcă istoricul...
+                                    </td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </section>
+        </main>
+    </div>
+
+    <!-- Firebase SDK Modular -->
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+        import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { getFirestore, collection, doc, setDoc, onSnapshot } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+
+        // Initializare Lucide Icons
+        lucide.createIcons();
+
+        // Variabile de stare globale
+        let currentUser = null;
+        let myName = "";
+        let staffList = [];
+        let historyList = [];
+        let todayStr = new Date().toLocaleDateString('ro-RO');
+
+        // Referințe DOM
+        const screens = {
+            loading: document.getElementById('loadingScreen'),
+            setName: document.getElementById('setNameScreen'),
+            app: document.getElementById('appScreen')
+        };
+        const dom = {
+            timeDisplay: document.getElementById('currentTimeDisplay'),
+            dateDisplay: document.getElementById('currentDateDisplay'),
+            setNameForm: document.getElementById('setNameForm'),
+            nameInput: document.getElementById('userNameInput'),
+            
+            myNameDisplay: document.getElementById('myNameDisplay'),
+            myAvatar: document.getElementById('myAvatar'),
+            myAvatarPulse: document.getElementById('myAvatarPulse'),
+            myStatusText: document.getElementById('myStatusText'),
+            myStatusDot: document.getElementById('myStatusDot'),
+            myStatusDotPing: document.getElementById('myStatusDotPing'),
+            
+            btnCheckIn: document.getElementById('btnCheckIn'),
+            btnCheckOut: document.getElementById('btnCheckOut'),
+            
+            staffGrid: document.getElementById('staffGrid'),
+            emptyStaffMsg: document.getElementById('emptyStaffMessage'),
+            activeCount: document.getElementById('activeCountBadge'),
+            historyTableBody: document.getElementById('historyTableBody')
+        };
+
+        // Update Ceas
+        function updateClock() {
+            const now = new Date();
+            dom.timeDisplay.textContent = now.toLocaleTimeString('ro-RO', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+            dom.dateDisplay.textContent = now.toLocaleDateString('ro-RO', { weekday: 'long', day: 'numeric', month: 'long' });
+            
+            // Verificare schimbare zi (pentru a reseta check-inurile a doua zi dacă aplicația rămâne deschisă)
+            const noDate = now.toLocaleDateString('ro-RO');
+            if (todayStr !== noDate) {
+                todayStr = noDate;
+                renderUI(); // Re-randăm ca să îi dea pe toți "afară" logic în noua zi
+            }
+        }
+        setInterval(updateClock, 1000);
+        updateClock();
+
+        // Helper pentru afișare timp formatat
+        function formatTime(timestamp) {
+            if (!timestamp) return '--:--';
+            return new Date(timestamp).toLocaleTimeString('ro-RO', { hour: '2-digit', minute: '2-digit' });
+        }
+
+        // ==========================================
+        // CONFIGURARE BAZA DE DATE (FIREBASE)
+        // ==========================================
+        
+        // 1. Daca ai urcat fisierul pe GitHub, sterge "//" de mai jos si completeaza cu datele tale din Firebase:
+        const MY_FIREBASE_CONFIG = {
+            // apiKey: "LIPESTE_AICI_API_KEY",
+            // authDomain: "LIPESTE_AICI_AUTH_DOMAIN",
+            // projectId: "LIPESTE_AICI_PROJECT_ID",
+            // storageBucket: "LIPESTE_AICI_STORAGE_BUCKET",
+            // messagingSenderId: "LIPESTE_AICI_MESSAGING_SENDER_ID",
+            // appId: "LIPESTE_AICI_APP_ID"
+        };
+
+        // Inițializare Firebase
+        let firebaseConfig = {};
+        if (typeof __firebase_config !== 'undefined') {
+            // Sistemul ruleaza in mediul de test aici pe site
+            firebaseConfig = JSON.parse(__firebase_config);
+        } else if (MY_FIREBASE_CONFIG.apiKey) {
+            // Sistemul ruleaza pe GitHub/Vercel cu datele tale
+            firebaseConfig = MY_FIREBASE_CONFIG;
+        } else {
+            // EROARE: Fisierul a fost deschis fara a fi conectat la o baza de date
+            screens.loading.innerHTML = `
+                <div class="bg-red-50 text-red-800 p-8 rounded-2xl max-w-lg text-center shadow-lg border border-red-200 m-4">
+                    <i data-lucide="alert-triangle" class="w-16 h-16 text-red-500 mx-auto mb-4"></i>
+                    <h2 class="font-bold text-2xl mb-3">Conexiune Bază de Date Lipsă</h2>
+                    <p class="mb-4">Aplicația s-a oprit pentru că nu știe unde să salveze pontajele (are nevoie de o bază de date Firebase gratuită).</p>
+                    <div class="text-left text-sm bg-white p-4 rounded text-red-900 border border-red-100">
+                        <b>Cum repari:</b><br><br>
+                        1. Deschide acest fișier <b>index.html</b> cu Notepad / TextEdit.<br>
+                        2. Caută textul <b>MY_FIREBASE_CONFIG</b> (spre sfârșitul codului).<br>
+                        3. Șterge "//" de la fiecare rând și pune datele tale din Firebase Console.<br>
+                        4. Salvează și reîncarcă pagina.
+                    </div>
+                </div>
+            `;
+            lucide.createIcons();
+            throw new Error("Te rog sa completezi setarile Firebase in cod!");
+        }
+
+        const app = initializeApp(firebaseConfig);
+        const auth = getAuth(app);
+        const db = getFirestore(app);
+        const appId = typeof __app_id !== 'undefined' ? __app_id : 'pontaj-echipa-app';
+
+        // 1. Autentificare & Ascultare Stare
+        async function initAuth() {
+            try {
+                if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
+                    await signInWithCustomToken(auth, __initial_auth_token);
+                } else {
+                    await signInAnonymously(auth);
+                }
+            } catch (error) {
+                console.error("Eroare Auth:", error);
+                alert("Eroare la conectarea la baza de date.");
+            }
+        }
+
+        onAuthStateChanged(auth, (user) => {
+            if (user) {
+                currentUser = user;
+                setupDataListeners();
+            }
+        });
+
+        initAuth();
+
+        // 2. Ascultători pentru datele din Firestore
+        function setupDataListeners() {
+            const statusRef = collection(db, 'artifacts', appId, 'public', 'data', 'staff_status');
+            
+            // Ascultăm starea echipei (cine e la muncă)
+            onSnapshot(statusRef, (snapshot) => {
+                staffList = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+                
+                const myDoc = staffList.find(s => s.id === currentUser.uid);
+                
+                screens.loading.classList.add('hidden');
+                
+                if (myDoc && myDoc.name) {
+                    myName = myDoc.name;
+                    screens.setName.classList.add('hidden');
+                    screens.app.classList.remove('hidden');
+                    renderUI();
+                } else {
+                    screens.setName.classList.remove('hidden');
+                }
+            }, (error) => {
+                console.error("Eroare citire status:", error);
+            });
+
+            // Ascultăm istoricul pentru tabelul de jos
+            const histRef = collection(db, 'artifacts', appId, 'public', 'data', 'attendance_history');
+            onSnapshot(histRef, (snapshot) => {
+                historyList = snapshot.docs.map(doc => doc.data());
+                historyList.sort((a, b) => (b.checkInTime || 0) - (a.checkInTime || 0));
+                renderHistoryTable();
+            }, (error) => console.error("Eroare istoric:", error));
+        }
+
+        // 3. Acțiuni Butoane
+        dom.setNameForm.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const name = dom.nameInput.value.trim();
+            if (!name) return;
+            
+            const docRef = doc(db, 'artifacts', appId, 'public', 'data', 'staff_status', currentUser.uid);
+            await setDoc(docRef, {
+                name: name,
+                status: 'OUT',
+                lastUpdated: new Date().getTime(),
+                date: todayStr
+            }, { merge: true });
+        });
+
+        async function handleCheckAction(action) {
+            if (!currentUser || !myName) return;
+            
+            const now = new Date().getTime();
+            const docRef = doc(db, 'artifacts', appId, 'public', 'data', 'staff_status', currentUser.uid);
+            const historyId = `${currentUser.uid}_${todayStr.replace(/\./g, '-')}`;
+            const histRef = doc(db, 'artifacts', appId, 'public', 'data', 'attendance_history', historyId);
+            
+            const myCurrentData = staffList.find(s => s.id === currentUser.uid);
+            let checkInT = action === 'IN' ? now : (myCurrentData?.checkInTime || null);
+            let checkOutT = action === 'IN' ? null : now;
+
+            // Update status curent
+            await setDoc(docRef, {
+                name: myName,
+                status: action,
+                checkInTime: checkInT,
+                checkOutTime: checkOutT,
+                date: todayStr,
+                lastUpdated: now
+            }, { merge: true });
+
+            // Update istoric azi
+            await setDoc(histRef, {
+                uid: currentUser.uid,
+                name: myName,
+                date: todayStr,
+                checkInTime: checkInT,
+                checkOutTime: checkOutT
+            }, { merge: true });
+        }
+
+        dom.btnCheckIn.addEventListener('click', () => handleCheckAction('IN'));
+        dom.btnCheckOut.addEventListener('click', () => handleCheckAction('OUT'));
+
+
+        // 4. Randare Interfață
+        function renderUI() {
+            if (!myName) return;
+            
+            dom.myNameDisplay.textContent = myName;
+            const myData = staffList.find(s => s.id === currentUser.uid);
+            
+            // Logică IN: Doar dacă e setat IN și e de azi.
+            const isCurrentlyIn = myData?.status === 'IN' && myData?.date === todayStr;
+
+            // Update Panou Personal
+            if (isCurrentlyIn) {
+                dom.myAvatar.className = "w-16 h-16 rounded-full flex items-center justify-center text-white bg-green-500 shadow-green-200 shadow-lg transition-colors duration-500 relative";
+                dom.myAvatarPulse.classList.remove('hidden');
+                dom.myStatusDotPing.classList.remove('hidden');
+                dom.myStatusDot.className = "relative inline-flex rounded-full h-3 w-3 bg-green-500";
+                dom.myStatusText.className = "font-medium text-green-600";
+                dom.myStatusText.textContent = "Ești la muncă";
+                
+                dom.btnCheckIn.classList.add('hidden');
+                dom.btnCheckOut.classList.remove('hidden');
+            } else {
+                dom.myAvatar.className = "w-16 h-16 rounded-full flex items-center justify-center text-white bg-slate-300 shadow-lg transition-colors duration-500 relative";
+                dom.myAvatarPulse.classList.add('hidden');
+                dom.myStatusDotPing.classList.add('hidden');
+                dom.myStatusDot.className = "relative inline-flex rounded-full h-3 w-3 bg-slate-400";
+                dom.myStatusText.className = "font-medium text-slate-500";
+                dom.myStatusText.textContent = "Ești plecat / Nu ai intrat azi";
+                
+                dom.btnCheckIn.classList.remove('hidden');
+                dom.btnCheckOut.classList.add('hidden');
+            }
+
+            // Gruparea Colegilor
+            const otherStaff = staffList.filter(s => s.id !== currentUser.uid);
+            const activeStaff = otherStaff.filter(s => s.status === 'IN' && s.date === todayStr);
+            const offlineStaff = otherStaff.filter(s => s.status !== 'IN' || s.date !== todayStr);
+
+            dom.activeCount.textContent = `${activeStaff.length} prezenți`;
+
+            if (otherStaff.length === 0) {
+                dom.emptyStaffMsg.classList.remove('hidden');
+                dom.staffGrid.innerHTML = '';
+            } else {
+                dom.emptyStaffMsg.classList.add('hidden');
+                dom.staffGrid.innerHTML = '';
+                
+                // Randează Activi
+                activeStaff.forEach(staff => {
+                    const card = `
+                    <div class="bg-white rounded-2xl p-5 border border-green-100 shadow-sm relative overflow-hidden group">
+                        <div class="absolute top-0 left-0 w-1.5 h-full bg-green-500"></div>
+                        <div class="flex justify-between items-start">
+                            <div>
+                                <h4 class="font-bold text-slate-800 text-lg">${staff.name}</h4>
+                                <div class="flex items-center space-x-1 mt-1 text-green-600 text-sm font-medium">
+                                    <i data-lucide="check-circle-2" class="w-4 h-4"></i>
+                                    <span>Prezent</span>
+                                </div>
+                            </div>
+                            <div class="text-right">
+                                <p class="text-xs text-slate-400 uppercase tracking-wider font-semibold">Ora intrării</p>
+                                <p class="text-lg font-mono font-medium text-slate-700">${formatTime(staff.checkInTime)}</p>
+                            </div>
+                        </div>
+                    </div>`;
+                    dom.staffGrid.insertAdjacentHTML('beforeend', card);
+                });
+
+                // Randează Inactivi/Plecați
+                offlineStaff.forEach(staff => {
+                    const wasHereToday = staff.date === todayStr && staff.checkInTime;
+                    const statusText = wasHereToday ? 'A plecat' : 'Absent azi';
+                    const timeInfo = wasHereToday 
+                        ? `<p class="text-xs text-slate-400 uppercase tracking-wider font-semibold">Program</p>
+                           <p class="text-sm font-mono font-medium text-slate-600">
+                               ${formatTime(staff.checkInTime)} - ${staff.checkOutTime ? formatTime(staff.checkOutTime) : '...'}
+                           </p>`
+                        : `<div class="text-xs text-slate-400 mt-2">Nicio activitate azi</div>`;
+
+                    const card = `
+                    <div class="bg-slate-50 rounded-2xl p-5 border border-slate-200 shadow-sm relative opacity-75">
+                        <div class="absolute top-0 left-0 w-1.5 h-full bg-slate-300 rounded-l-2xl"></div>
+                        <div class="flex justify-between items-start">
+                            <div>
+                                <h4 class="font-bold text-slate-600 text-lg">${staff.name}</h4>
+                                <div class="flex items-center space-x-1 mt-1 text-slate-500 text-sm font-medium">
+                                    <i data-lucide="x-circle" class="w-4 h-4"></i>
+                                    <span>${statusText}</span>
+                                </div>
+                            </div>
+                            <div class="text-right">
+                                ${timeInfo}
+                            </div>
+                        </div>
+                    </div>`;
+                    dom.staffGrid.insertAdjacentHTML('beforeend', card);
+                });
+            }
+            
+            // Reactualizare iconițe noi introduse în DOM
+            lucide.createIcons();
+        }
+
+        // 5. Randare Tabel Istoric
+        function renderHistoryTable() {
+            const pastDaysHistory = historyList.filter(h => h.date !== todayStr);
+            
+            if (pastDaysHistory.length === 0) {
+                dom.historyTableBody.innerHTML = `
+                    <tr>
+                        <td colspan="5" class="px-6 py-8 text-center text-slate-400">
+                            Nu există încă date în istoric pentru zilele trecute. Acestea vor apărea începând de mâine.
+                        </td>
+                    </tr>`;
+                return;
+            }
+
+            let html = '';
+            pastDaysHistory.forEach(record => {
+                let totalHours = '--';
+                if (record.checkInTime && record.checkOutTime) {
+                    const diffMs = record.checkOutTime - record.checkInTime;
+                    const hrs = Math.floor(diffMs / (1000 * 60 * 60));
+                    const mins = Math.floor((diffMs % (1000 * 60 * 60)) / (1000 * 60));
+                    totalHours = `${hrs}h ${mins}m`;
+                }
+
+                html += `
+                    <tr class="hover:bg-slate-50 transition-colors">
+                        <td class="px-6 py-4 font-medium text-slate-800">${record.date}</td>
+                        <td class="px-6 py-4">${record.name}</td>
+                        <td class="px-6 py-4 font-mono text-green-600">${formatTime(record.checkInTime)}</td>
+                        <td class="px-6 py-4 font-mono text-rose-500">${formatTime(record.checkOutTime)}</td>
+                        <td class="px-6 py-4">
+                            <span class="bg-indigo-50 text-indigo-700 px-2 py-1 rounded font-medium text-xs">
+                                ${totalHours}
+                            </span>
+                        </td>
+                    </tr>`;
+            });
+            dom.historyTableBody.innerHTML = html;
+        }
+
+    </script>
+</body>
+</html>
