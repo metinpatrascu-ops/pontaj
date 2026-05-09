@@ -3,26 +3,31 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Pontaj Live</title>
+  <!-- Aceste tag-uri forteaza telefonul sa nu mai memoreze varianta veche -->
+  <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+  <meta http-equiv="Pragma" content="no-cache">
+  <meta http-equiv="Expires" content="0">
   
-  <!-- CSS pentru Design -->
+  <title>Pontaj Live</title>
   <script src="https://cdn.tailwindcss.com"></script>
-  <!-- Iconițe -->
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
 </head>
 <body class="bg-slate-50 text-gray-800 font-sans antialiased">
   
-  <!-- Aici va fi randată aplicația -->
+  <!-- BARĂ DE VERIFICARE (Să știm sigur că s-a actualizat) -->
+  <div class="bg-green-600 text-white text-center py-1.5 font-bold text-sm tracking-wide shadow-md">
+    <i class="fas fa-check-circle"></i> Versiunea 3.0 (Dacă vezi asta, site-ul e actualizat!)
+  </div>
+
   <div id="app"></div>
 
-  <!-- Scriptul Principal Nativ (Fără React/Babel) -->
   <script type="module">
     import { initializeApp } from "https://www.gstatic.com/firebasejs/10.11.1/firebase-app.js";
     import { getFirestore, collection, onSnapshot, addDoc, updateDoc, doc } from "https://www.gstatic.com/firebasejs/10.11.1/firebase-firestore.js";
 
-    // Configuratia ta exacta
+    // CONFIGURATIE CORECTATĂ LA SÂNGE:
     const firebaseConfig = {
-      apiKey: "AIzaSyAkTlrR4Sli5jqtP7D80RGxdGFevhkRpOE",
+      apiKey: "AIzaSyAkTIrR4S1i5jqtP7D80RGxdGFevhkRpOE",
       authDomain: "pontaj-staff.firebaseapp.com",
       projectId: "pontaj-staff",
       storageBucket: "pontaj-staff.firebasestorage.app",
@@ -30,41 +35,39 @@
       appId: "1:684456604284:web:b6a000722562624d49cff9"
     };
 
-    // Initialize Firebase
     const app = initializeApp(firebaseConfig);
     const db = getFirestore(app);
     const timesheetsRef = collection(db, 'pontaje');
 
-    // Variabile globale
     let userName = localStorage.getItem('pontaj_username') || '';
     let records = [];
     let isLoading = true;
     const appDiv = document.getElementById('app');
 
-    // Functia care deseneaza interfata
     function render() {
       if (isLoading) {
         appDiv.innerHTML = `
-          <div class="min-h-screen flex flex-col items-center justify-center">
+          <div class="min-h-[90vh] flex flex-col items-center justify-center">
             <i class="fas fa-spinner fa-spin text-4xl text-blue-600 mb-4"></i>
-            <h2 class="text-xl font-semibold">Conectare la baza de date...</h2>
+            <h2 class="text-xl font-semibold">Se conectează la baza de date...</h2>
           </div>`;
         return;
       }
 
-      // ECRAN LOGARE
       if (!userName) {
         appDiv.innerHTML = `
-          <div class="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 flex items-center justify-center p-4">
-            <div class="bg-white rounded-2xl shadow-xl p-8 w-full max-w-md text-center">
+          <div class="min-h-[90vh] bg-gradient-to-br from-blue-50 to-indigo-100 flex items-center justify-center p-4">
+            <div class="bg-white rounded-2xl shadow-xl p-8 w-full max-w-md text-center border-t-4 border-blue-600">
               <div class="w-16 h-16 bg-blue-100 text-blue-600 rounded-full flex items-center justify-center mx-auto mb-6">
                 <i class="fas fa-chart-line text-2xl"></i>
               </div>
               <h1 class="text-2xl font-bold mb-2">Aplicație Pontaj</h1>
               <p class="text-gray-500 mb-8">Introdu numele tău pentru a continua</p>
               <form id="loginForm" class="space-y-4">
-                <input type="text" id="nameInput" placeholder="Ex: Ion Popescu" class="w-full px-4 py-3 rounded-lg border border-gray-300 focus:ring-2 focus:ring-blue-500 outline-none text-lg" required minlength="2">
-                <button type="submit" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-semibold py-3 rounded-lg transition-colors">Intră în aplicație</button>
+                <input type="text" id="nameInput" placeholder="Ex: Ion Popescu" class="w-full px-4 py-3 rounded-lg border border-gray-300 focus:ring-2 focus:ring-blue-500 outline-none text-lg font-medium text-center" required minlength="2">
+                <button type="submit" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-3.5 rounded-xl transition-transform active:scale-95 shadow-md">
+                  Intră în aplicație
+                </button>
               </form>
             </div>
           </div>`;
@@ -81,7 +84,6 @@
         return;
       }
 
-      // Procesare date pentru Dashboard
       const myActive = records.find(r => r.userName.toLowerCase() === userName.toLowerCase() && r.status === 'active');
       const liveWorkers = records.filter(r => r.status === 'active');
       const historyByDate = records.reduce((acc, r) => {
@@ -90,7 +92,6 @@
         return acc;
       }, {});
 
-      // Construim HTML-ul pentru cine e la munca
       let liveWorkersHtml = liveWorkers.length === 0 
         ? '<p class="text-gray-500 text-center mt-6">Nimeni nu este pontat acum.</p>' 
         : liveWorkers.map(w => `
@@ -109,7 +110,6 @@
           </div>
         `).join('');
 
-      // Construim HTML-ul pentru istoric
       let historyHtml = Object.keys(historyByDate).length === 0 
         ? '<p class="text-gray-500 text-center mt-6">Nu există date salvate în istoric.</p>' 
         : Object.keys(historyByDate).sort((a,b) => new Date(b) - new Date(a)).map(date => `
@@ -133,8 +133,8 @@
                       <td class="px-4 py-3 text-red-600 font-medium">${r.checkOut ? formatTime(r.checkOut) : '---'}</td>
                       <td class="px-4 py-3">
                         ${r.status === 'active' 
-                          ? '<span class="text-green-700 bg-green-50 px-2.5 py-1 rounded-md text-xs font-semibold">În curs</span>' 
-                          : '<span class="text-slate-600 bg-slate-100 px-2.5 py-1 rounded-md text-xs font-semibold">Finalizat</span>'}
+                          ? '<span class="text-green-700 bg-green-50 px-2.5 py-1 rounded-md text-xs font-semibold border border-green-200">În curs</span>' 
+                          : '<span class="text-slate-600 bg-slate-100 px-2.5 py-1 rounded-md text-xs font-semibold border border-slate-200">Finalizat</span>'}
                       </td>
                     </tr>
                   `).join('')}
@@ -144,7 +144,6 @@
           </div>
         `).join('');
 
-      // ECRAN DASHBOARD
       appDiv.innerHTML = `
         <div class="min-h-screen bg-slate-50 pb-12">
           <header class="bg-white shadow-sm border-b border-gray-200 sticky top-0 z-10">
@@ -153,14 +152,13 @@
                 <i class="fas fa-chart-line"></i> Pontaj Live
               </h1>
               <div class="flex items-center gap-4">
-                <span class="text-gray-600 font-medium hidden sm:block"><i class="fas fa-user-check mr-2"></i>${userName}</span>
-                <button id="logoutBtn" class="text-sm text-red-500 font-medium hover:text-red-700 bg-red-50 px-3 py-1.5 rounded-lg transition-colors">Ieși din cont</button>
+                <span class="text-gray-600 font-medium hidden sm:block"><i class="fas fa-user-check mr-2"></i> ${userName}</span>
+                <button id="logoutBtn" class="text-sm text-red-500 font-bold hover:text-red-700 bg-red-50 px-3 py-1.5 rounded-lg border border-red-100 transition-colors">Schimbă User</button>
               </div>
             </div>
           </header>
 
           <main class="max-w-5xl mx-auto px-4 mt-8 space-y-6">
-            <!-- SECTIUNE BUTOANE PENTRU CHECK-IN / CHECK-OUT -->
             <section class="bg-white rounded-2xl shadow-sm border border-gray-200 p-8 text-center flex flex-col items-center justify-center min-h-[250px]">
               ${myActive ? `
                 <div class="w-20 h-20 bg-green-100 text-green-600 rounded-full flex items-center justify-center mb-4">
@@ -184,7 +182,6 @@
             </section>
             
             <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
-              <!-- PANOU LIVE -->
               <section class="lg:col-span-1 bg-white rounded-2xl shadow-sm border border-gray-200 p-5">
                 <div class="flex items-center justify-between border-b border-gray-100 pb-3 mb-4">
                   <h3 class="font-bold text-gray-800 flex items-center gap-2"><i class="fas fa-users text-blue-600"></i> Acum la muncă</h3>
@@ -193,7 +190,6 @@
                 ${liveWorkersHtml}
               </section>
 
-              <!-- ISTORIC -->
               <section class="lg:col-span-2 bg-white rounded-2xl shadow-sm border border-gray-200 p-5">
                 <h3 class="font-bold text-gray-800 flex items-center gap-2 border-b border-gray-100 pb-3 mb-4">
                   <i class="far fa-calendar-alt text-slate-600"></i> Istoric complet pontaj
@@ -205,7 +201,6 @@
         </div>
       `;
 
-      // Atasam functionalitatea butoanelor
       if (document.getElementById('logoutBtn')) {
         document.getElementById('logoutBtn').onclick = () => {
           localStorage.removeItem('pontaj_username');
@@ -214,11 +209,11 @@
         };
       }
 
-      // LOGICA DE SALVARE IN BAZA DE DATE
       if (document.getElementById('checkinBtn')) {
         document.getElementById('checkinBtn').onclick = async () => {
           try {
             document.getElementById('checkinBtn').innerHTML = '<i class="fas fa-spinner fa-spin"></i> Se salvează...';
+            document.getElementById('checkinBtn').disabled = true;
             await addDoc(timesheetsRef, {
               userName: userName,
               checkIn: new Date().toISOString(),
@@ -227,8 +222,8 @@
               status: 'active'
             });
           } catch (e) { 
-            alert("A apărut o eroare la salvare: " + e.message); 
-            render();
+            alert("A apărut o eroare de la Firebase. Detalii: " + e.message); 
+            render(); 
           }
         };
       }
@@ -237,47 +232,38 @@
         document.getElementById('checkoutBtn').onclick = async () => {
           try {
             document.getElementById('checkoutBtn').innerHTML = '<i class="fas fa-spinner fa-spin"></i> Se salvează...';
+            document.getElementById('checkoutBtn').disabled = true;
             await updateDoc(doc(db, 'pontaje', myActive.id), {
               checkOut: new Date().toISOString(),
               status: 'completed'
             });
           } catch (e) { 
-            alert("A apărut o eroare la salvare: " + e.message); 
-            render();
+            alert("A apărut o eroare de la Firebase. Detalii: " + e.message); 
+            render(); 
           }
         };
       }
     }
 
-    // Functii de ajutor pt data si timp
-    function formatTime(isoStr) { 
-      return new Date(isoStr).toLocaleTimeString('ro-RO', {hour:'2-digit', minute:'2-digit'}); 
-    }
-    
-    function formatDateLabel(isoStr) { 
-      return new Date(isoStr).toLocaleDateString('ro-RO', {weekday:'long', year:'numeric', month:'long', day:'numeric'}); 
-    }
-    
-    function getLocalDateString() {
-      const d = new Date();
-      return d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0');
-    }
+    function formatTime(isoStr) { return new Date(isoStr).toLocaleTimeString('ro-RO', {hour:'2-digit', minute:'2-digit'}); }
+    function formatDateLabel(isoStr) { return new Date(isoStr).toLocaleDateString('ro-RO', {weekday:'long', year:'numeric', month:'long', day:'numeric'}); }
+    function getLocalDateString() { const d = new Date(); return d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0'); }
 
-    // CONECTARE LA BAZA DE DATE (Ramas bun problemelor cu refresh-ul)
+    // Start App
+    render();
+
+    // Ascultă după modificări în baza de date
     onSnapshot(timesheetsRef, (snapshot) => {
       records = snapshot.docs.map(doc => ({id: doc.id, ...doc.data()}));
-      // Sortam cele mai noi primele
       records.sort((a,b) => new Date(b.checkIn) - new Date(a.checkIn));
       isLoading = false;
       render();
     }, (error) => {
-      // Daca ceva merge prost, acum aplicatia ITI VA SPUNE EXPLICIT pe ecran:
       appDiv.innerHTML = `
         <div class="min-h-screen bg-red-50 flex items-center justify-center p-4">
           <div class="bg-white p-6 rounded-xl shadow-lg border-l-4 border-red-600 max-w-md w-full">
-            <h2 class="text-xl font-bold text-red-600 mb-2">Eroare Bază de Date</h2>
-            <p class="text-gray-700 mb-4">${error.message}</p>
-            <p class="text-sm text-gray-500">Ai deschis permisiunile din tabul Security din Firebase, așa cum am discutat?</p>
+            <h2 class="text-xl font-bold text-red-600 mb-2"><i class="fas fa-exclamation-triangle"></i> Conexiune blocată</h2>
+            <p class="text-gray-700 mb-4 font-medium">${error.message}</p>
           </div>
         </div>
       `;
