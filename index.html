@@ -3,20 +3,15 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <!-- Aceste tag-uri forteaza telefonul sa nu mai memoreze varianta veche -->
   <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
-  <meta http-equiv="Pragma" content="no-cache">
-  <meta http-equiv="Expires" content="0">
-  
   <title>Pontaj Live</title>
   <script src="https://cdn.tailwindcss.com"></script>
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
 </head>
 <body class="bg-slate-50 text-gray-800 font-sans antialiased">
   
-  <!-- BARĂ DE VERIFICARE (Să știm sigur că s-a actualizat) -->
-  <div class="bg-green-600 text-white text-center py-1.5 font-bold text-sm tracking-wide shadow-md">
-    <i class="fas fa-check-circle"></i> Versiunea 3.0 (Dacă vezi asta, site-ul e actualizat!)
+  <div class="bg-blue-600 text-white text-center py-1.5 font-bold text-sm tracking-wide shadow-md">
+    <i class="fas fa-bolt"></i> Versiunea 3.1 (Conexiune Ultra-Rapidă)
   </div>
 
   <div id="app"></div>
@@ -25,9 +20,9 @@
     import { initializeApp } from "https://www.gstatic.com/firebasejs/10.11.1/firebase-app.js";
     import { getFirestore, collection, onSnapshot, addDoc, updateDoc, doc } from "https://www.gstatic.com/firebasejs/10.11.1/firebase-firestore.js";
 
-    // CONFIGURATIE CORECTATĂ LA SÂNGE:
+    // CHEIA CORECTATĂ LA LITERĂ (L mic în loc de I mare):
     const firebaseConfig = {
-      apiKey: "AIzaSyAkTIrR4S1i5jqtP7D80RGxdGFevhkRpOE",
+      apiKey: "AIzaSyAkTlrR4Sli5jqtP7D80RGxdGFevhkRpOE",
       authDomain: "pontaj-staff.firebaseapp.com",
       projectId: "pontaj-staff",
       storageBucket: "pontaj-staff.firebasestorage.app",
@@ -42,9 +37,30 @@
     let userName = localStorage.getItem('pontaj_username') || '';
     let records = [];
     let isLoading = true;
+    let loadingError = null;
     const appDiv = document.getElementById('app');
 
+    // Dacă durează mai mult de 5 secunde, aruncăm o eroare în loc să blocăm ecranul
+    setTimeout(() => {
+      if (isLoading) {
+        loadingError = "Conexiunea la baza de date a expirat. Verifică setările Firebase sau conexiunea la internet.";
+        render();
+      }
+    }, 5000);
+
     function render() {
+      if (loadingError) {
+        appDiv.innerHTML = `
+          <div class="min-h-[90vh] bg-red-50 flex flex-col items-center justify-center p-4">
+            <div class="bg-white p-6 rounded-xl shadow-lg border-l-4 border-red-600 max-w-md w-full text-center">
+              <i class="fas fa-exclamation-circle text-4xl text-red-500 mb-4"></i>
+              <h2 class="text-xl font-bold text-red-600 mb-2">Eroare de Încărcare</h2>
+              <p class="text-gray-700 font-medium">${loadingError}</p>
+            </div>
+          </div>`;
+        return;
+      }
+
       if (isLoading) {
         appDiv.innerHTML = `
           <div class="min-h-[90vh] flex flex-col items-center justify-center">
@@ -249,7 +265,6 @@
     function formatDateLabel(isoStr) { return new Date(isoStr).toLocaleDateString('ro-RO', {weekday:'long', year:'numeric', month:'long', day:'numeric'}); }
     function getLocalDateString() { const d = new Date(); return d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0'); }
 
-    // Start App
     render();
 
     // Ascultă după modificări în baza de date
@@ -259,14 +274,9 @@
       isLoading = false;
       render();
     }, (error) => {
-      appDiv.innerHTML = `
-        <div class="min-h-screen bg-red-50 flex items-center justify-center p-4">
-          <div class="bg-white p-6 rounded-xl shadow-lg border-l-4 border-red-600 max-w-md w-full">
-            <h2 class="text-xl font-bold text-red-600 mb-2"><i class="fas fa-exclamation-triangle"></i> Conexiune blocată</h2>
-            <p class="text-gray-700 mb-4 font-medium">${error.message}</p>
-          </div>
-        </div>
-      `;
+      loadingError = error.message;
+      isLoading = false;
+      render();
     });
 
   </script>
