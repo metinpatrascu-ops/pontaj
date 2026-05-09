@@ -1,99 +1,382 @@
-<!DOCTYPE html>
-<html lang="ro">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Pontaj Echipa</title>
-    <script src="https://cdn.tailwindcss.com"></script>
-</head>
-<body class="bg-gray-100 p-4">
-    <div class="max-w-md mx-auto bg-white rounded-xl shadow-md overflow-hidden p-6">
-        <div class="flex justify-between items-center mb-6">
-            <h1 class="text-xl font-bold">🟢 Cine e la muncă?</h1>
-            <div id="userBadge" class="text-xs bg-gray-100 px-2 py-1 rounded"></div>
-        </div>
+import React, { useState, useEffect, useMemo } from 'react';
+import { initializeApp } from 'firebase/app';
+import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from 'firebase/auth';
+import { getFirestore, collection, onSnapshot, addDoc, updateDoc, doc } from 'firebase/firestore';
+import { Clock, LogIn, LogOut, Users, Calendar, UserCheck, Activity, Search } from 'lucide-react';
 
-        <!-- Buton Principal -->
-        <div id="actionArea" class="mb-8">
-            <button id="mainBtn" class="w-full py-4 rounded-lg font-bold text-white shadow-lg transition-transform active:scale-95"></button>
-        </div>
+// --- Firebase Initialization ---
+const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : {};
+const app = initializeApp(firebaseConfig);
+const auth = getAuth(app);
+const db = getFirestore(app);
+const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
 
-        <!-- Lista Echipa -->
-        <div class="border-t pt-4">
-            <h2 class="text-sm font-bold text-gray-400 uppercase mb-4">Echipa Online:</h2>
-            <div id="staffList" class="space-y-3">
-                <p class="text-gray-400 text-sm italic">Se încarcă lista...</p>
-            </div>
-        </div>
-    </div>
+export default function App() {
+  const [authUser, setAuthUser] = useState(null);
+  const [userName, setUserName] = useState('');
+  const [isEntered, setIsEntered] = useState(false);
+  const [records, setRecords] = useState([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [searchDate, setSearchDate] = useState('');
 
-    <script type="module">
-        import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
-        import { getDatabase, ref, set, onValue, remove, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-database.js";
-
-        const firebaseConfig = {
-            apiKey: "AIzaSyAkTlrR4Sli5jqtP7D80RGxdGFevhkRpOE",
-            authDomain: "pontaj-staff.firebaseapp.com",
-            projectId: "pontaj-staff",
-            storageBucket: "pontaj-staff.firebasestorage.app",
-            messagingSenderId: "684456604284",
-            appId: "1:684456604284:web:b6a000722562624d49cff9"
-        };
-
-        const app = initializeApp(firebaseConfig);
-        const db = getDatabase(app);
-
-        // Verificare Nume
-        let myName = localStorage.getItem('p_name');
-        if (!myName) {
-            myName = prompt("Introdu numele tău:");
-            if (myName) localStorage.setItem('p_name', myName);
+  // 1. Initialize Authentication
+  useEffect(() => {
+    const initAuth = async () => {
+      try {
+        if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
+          await signInWithCustomToken(auth, __initial_auth_token);
+        } else {
+          await signInAnonymously(auth);
         }
-        document.getElementById('userBadge').innerText = myName;
+      } catch (error) {
+        console.error("Eroare la autentificare:", error);
+      }
+    };
+    initAuth();
 
-        const myId = myName ? myName.replace(/\s+/g, '_').toLowerCase() : null;
+    const unsubscribe = onAuthStateChanged(auth, (user) => {
+      setAuthUser(user);
+    });
+    return () => unsubscribe();
+  }, []);
 
-        // Ascultare date LIVE
-        onValue(ref(db, 'prezenta'), (snap) => {
-            const data = snap.val() || {};
-            const listDiv = document.getElementById('staffList');
-            const btn = document.getElementById('mainBtn');
-            listDiv.innerHTML = "";
+  // 2. Fetch Data from Firestore (Live Updates)
+  useEffect(() => {
+    if (!authUser) return;
 
-            let suntPontat = false;
+    // Fetch all timesheets from public shared data collection
+    const timesheetsRef = collection(db, 'artifacts', appId, 'public', 'data', 'timesheets');
+    
+    const unsubscribe = onSnapshot(timesheetsRef, (snapshot) => {
+      const data = snapshot.docs.map(doc => ({
+        id: doc.id,
+        ...doc.data()
+      }));
+      // Sort in memory (newest first)
+      data.sort((a, b) => new Date(b.checkIn) - new Date(a.checkIn));
+      setRecords(data);
+      setIsLoading(false);
+    }, (error) => {
+      console.error("Eroare la citirea datelor:", error);
+      setIsLoading(false);
+    });
 
-            Object.entries(data).forEach(([id, info]) => {
-                if (id === myId) suntPontat = true;
+    return () => unsubscribe();
+  }, [authUser]);
 
-                const item = document.createElement('div');
-                item.className = "flex justify-between items-center p-3 bg-gray-50 rounded-lg border";
-                item.innerHTML = `
-                    <span class="font-bold">${info.name}</span>
-                    <div class="flex items-center gap-4">
-                        <span class="text-xs text-gray-400">${new Date(info.since).toLocaleTimeString('ro-RO', {hour:'2-digit', minute:'2-digit'})}</span>
-                        ${myName === "Metin Patrascu" ? `<button onclick="window.sterge('${id}')" class="text-red-400 font-bold px-2">X</button>` : ''}
+  // --- Logic & Helpers ---
+  
+  // Format date correctly in local timezone
+  const getLocalDateString = () => {
+    const date = new Date();
+    // Use YYYY-MM-DD format for logical sorting and grouping
+    return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+  };
+
+  // Find if current user is already working (has active check-in without check-out)
+  const myActiveRecord = useMemo(() => {
+    if (!userName) return null;
+    return records.find(r => 
+      r.userName.toLowerCase() === userName.toLowerCase() && 
+      r.status === 'active'
+    );
+  }, [records, userName]);
+
+  // Filter live workers
+  const liveWorkers = useMemo(() => {
+    return records.filter(r => r.status === 'active');
+  }, [records]);
+
+  // Group history records by Date
+  const historyByDate = useMemo(() => {
+    let filteredRecords = records;
+    if (searchDate) {
+      filteredRecords = records.filter(r => r.date === searchDate);
+    }
+
+    return filteredRecords.reduce((acc, record) => {
+      if (!acc[record.date]) {
+        acc[record.date] = [];
+      }
+      acc[record.date].push(record);
+      return acc;
+    }, {});
+  }, [records, searchDate]);
+
+  // --- Actions ---
+
+  const handleEnterApp = (e) => {
+    e.preventDefault();
+    if (userName.trim().length >= 2) {
+      setUserName(userName.trim());
+      setIsEntered(true);
+    }
+  };
+
+  const handleCheckIn = async () => {
+    if (!authUser) return;
+    try {
+      const timesheetsRef = collection(db, 'artifacts', appId, 'public', 'data', 'timesheets');
+      const now = new Date();
+      await addDoc(timesheetsRef, {
+        userName: userName,
+        checkIn: now.toISOString(),
+        checkOut: null,
+        date: getLocalDateString(),
+        status: 'active'
+      });
+    } catch (error) {
+      console.error("Eroare la Check-in:", error);
+    }
+  };
+
+  const handleCheckOut = async () => {
+    if (!authUser || !myActiveRecord) return;
+    try {
+      const docRef = doc(db, 'artifacts', appId, 'public', 'data', 'timesheets', myActiveRecord.id);
+      await updateDoc(docRef, {
+        checkOut: new Date().toISOString(),
+        status: 'completed'
+      });
+    } catch (error) {
+      console.error("Eroare la Check-out:", error);
+    }
+  };
+
+  const formatTime = (isoString) => {
+    if (!isoString) return '--:--';
+    return new Date(isoString).toLocaleTimeString('ro-RO', { hour: '2-digit', minute: '2-digit' });
+  };
+
+  const formatDateLabel = (dateStr) => {
+    const dateObj = new Date(dateStr);
+    return dateObj.toLocaleDateString('ro-RO', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
+  };
+
+  // --- UI Renders ---
+
+  if (isLoading) {
+    return (
+      <div className="min-h-screen bg-slate-50 flex items-center justify-center">
+        <div className="flex flex-col items-center text-blue-600 animate-pulse">
+          <Clock size={48} className="mb-4" />
+          <h2 className="text-xl font-semibold">Se încarcă pontajul...</h2>
+        </div>
+      </div>
+    );
+  }
+
+  // LOGIN SCREEN
+  if (!isEntered) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 flex items-center justify-center p-4">
+        <div className="bg-white rounded-2xl shadow-xl p-8 w-full max-w-md text-center">
+          <div className="w-16 h-16 bg-blue-100 text-blue-600 rounded-full flex items-center justify-center mx-auto mb-6">
+            <Activity size={32} />
+          </div>
+          <h1 className="text-2xl font-bold text-gray-800 mb-2">Aplicație Pontaj Live</h1>
+          <p className="text-gray-500 mb-8">Introdu numele tău pentru a continua</p>
+          
+          <form onSubmit={handleEnterApp} className="space-y-4">
+            <input
+              type="text"
+              placeholder="Ex: Ion Popescu"
+              value={userName}
+              onChange={(e) => setUserName(e.target.value)}
+              className="w-full px-4 py-3 rounded-lg border border-gray-300 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all text-lg"
+              required
+              minLength={2}
+            />
+            <button
+              type="submit"
+              className="w-full bg-blue-600 hover:bg-blue-700 text-white font-semibold py-3 px-4 rounded-lg transition-colors flex items-center justify-center gap-2"
+            >
+              Intră în aplicație <LogIn size={20} />
+            </button>
+          </form>
+        </div>
+      </div>
+    );
+  }
+
+  // MAIN DASHBOARD
+  return (
+    <div className="min-h-screen bg-slate-50 pb-12">
+      {/* Header */}
+      <header className="bg-white shadow-sm border-b border-gray-200 sticky top-0 z-10">
+        <div className="max-w-5xl mx-auto px-4 py-4 flex justify-between items-center">
+          <div className="flex items-center gap-2 text-blue-600">
+            <Activity size={24} />
+            <h1 className="text-xl font-bold text-gray-800 hidden sm:block">Pontaj Live</h1>
+          </div>
+          <div className="flex items-center gap-4">
+            <span className="text-gray-600 font-medium flex items-center gap-2">
+              <UserCheck size={18} />
+              Salut, {userName}
+            </span>
+            <button 
+              onClick={() => setIsEntered(false)}
+              className="text-sm text-gray-500 hover:text-red-500 transition-colors"
+            >
+              Schimbă user
+            </button>
+          </div>
+        </div>
+      </header>
+
+      <main className="max-w-5xl mx-auto px-4 mt-8 space-y-6">
+        
+        {/* CHECK IN / OUT SECTION */}
+        <section className="bg-white rounded-2xl shadow-sm border border-gray-200 p-6 sm:p-8 flex flex-col items-center justify-center min-h-[200px]">
+          {myActiveRecord ? (
+            <div className="text-center w-full max-w-md">
+              <div className="mb-4 inline-flex items-center justify-center w-16 h-16 bg-green-100 text-green-600 rounded-full">
+                <Clock size={32} />
+              </div>
+              <h2 className="text-2xl font-bold text-gray-800 mb-2">Ești la muncă</h2>
+              <p className="text-gray-600 mb-8">
+                Ai dat Check-in la ora <span className="font-bold text-gray-900">{formatTime(myActiveRecord.checkIn)}</span>
+              </p>
+              <button
+                onClick={handleCheckOut}
+                className="w-full bg-red-500 hover:bg-red-600 text-white font-bold text-lg py-4 px-6 rounded-xl shadow-lg shadow-red-200 transition-transform active:scale-95 flex items-center justify-center gap-2"
+              >
+                <LogOut size={24} /> Oferă Check-Out (Ieșire)
+              </button>
+            </div>
+          ) : (
+            <div className="text-center w-full max-w-md">
+              <div className="mb-4 inline-flex items-center justify-center w-16 h-16 bg-slate-100 text-slate-500 rounded-full">
+                <LogOut size={32} className="ml-1" />
+              </div>
+              <h2 className="text-2xl font-bold text-gray-800 mb-2">Nu ești pontat activ</h2>
+              <p className="text-gray-600 mb-8">Apasă butonul de mai jos când începi munca.</p>
+              <button
+                onClick={handleCheckIn}
+                className="w-full bg-green-500 hover:bg-green-600 text-white font-bold text-lg py-4 px-6 rounded-xl shadow-lg shadow-green-200 transition-transform active:scale-95 flex items-center justify-center gap-2"
+              >
+                <LogIn size={24} /> Oferă Check-In (Intrare)
+              </button>
+            </div>
+          )}
+        </section>
+
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          
+          {/* LIVE WORKERS SECTION */}
+          <section className="lg:col-span-1 bg-white rounded-2xl shadow-sm border border-gray-200 overflow-hidden flex flex-col h-[500px]">
+            <div className="bg-blue-50 border-b border-blue-100 p-4 flex items-center gap-2">
+              <Users className="text-blue-600" size={20} />
+              <h3 className="font-bold text-gray-800">Cine e la muncă acum?</h3>
+              <span className="ml-auto bg-blue-600 text-white text-xs font-bold px-2.5 py-1 rounded-full">
+                {liveWorkers.length}
+              </span>
+            </div>
+            
+            <div className="overflow-y-auto flex-1 p-4">
+              {liveWorkers.length === 0 ? (
+                <div className="text-center text-gray-500 mt-10">
+                  <p>Nimeni nu este pontat în acest moment.</p>
+                </div>
+              ) : (
+                <ul className="space-y-3">
+                  {liveWorkers.map(worker => (
+                    <li key={worker.id} className="flex items-center justify-between bg-slate-50 p-3 rounded-lg border border-slate-100">
+                      <div className="flex items-center gap-3">
+                        <div className="w-10 h-10 rounded-full bg-blue-100 text-blue-600 flex items-center justify-center font-bold text-sm">
+                          {worker.userName.substring(0, 2).toUpperCase()}
+                        </div>
+                        <div>
+                          <p className="font-semibold text-gray-800">{worker.userName}</p>
+                          <p className="text-xs text-green-600 flex items-center gap-1">
+                            <span className="w-2 h-2 rounded-full bg-green-500 animate-pulse"></span>
+                            Online (de la {formatTime(worker.checkIn)})
+                          </p>
+                        </div>
+                      </div>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+          </section>
+
+          {/* HISTORY SECTION */}
+          <section className="lg:col-span-2 bg-white rounded-2xl shadow-sm border border-gray-200 overflow-hidden flex flex-col h-[500px]">
+            <div className="bg-slate-50 border-b border-gray-200 p-4 flex flex-col sm:flex-row items-center justify-between gap-4">
+              <div className="flex items-center gap-2">
+                <Calendar className="text-slate-600" size={20} />
+                <h3 className="font-bold text-gray-800">Istoric complet pontaj</h3>
+              </div>
+              <div className="relative">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={16} />
+                <input 
+                  type="date" 
+                  value={searchDate}
+                  onChange={(e) => setSearchDate(e.target.value)}
+                  className="pl-9 pr-3 py-1.5 text-sm rounded-lg border border-gray-300 focus:ring-blue-500 focus:border-blue-500 w-full sm:w-auto"
+                />
+              </div>
+            </div>
+
+            <div className="overflow-y-auto flex-1 p-4 bg-slate-50/50">
+              {Object.keys(historyByDate).length === 0 ? (
+                <div className="text-center text-gray-500 mt-10">
+                  <p>Nu există date de pontaj pentru acest filtru.</p>
+                </div>
+              ) : (
+                Object.keys(historyByDate).sort((a, b) => new Date(b) - new Date(a)).map(date => (
+                  <div key={date} className="mb-6 last:mb-0">
+                    <h4 className="text-sm font-bold text-slate-500 uppercase tracking-wider mb-3 flex items-center gap-2 before:content-[''] before:h-px before:flex-1 before:bg-slate-200 after:content-[''] after:h-px after:flex-1 after:bg-slate-200">
+                      {formatDateLabel(date)}
+                    </h4>
+                    
+                    <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+                      <div className="overflow-x-auto">
+                        <table className="w-full text-left text-sm whitespace-nowrap">
+                          <thead className="bg-slate-50 border-b border-gray-100 text-slate-600">
+                            <tr>
+                              <th className="px-4 py-3 font-medium">Nume</th>
+                              <th className="px-4 py-3 font-medium">Intrare</th>
+                              <th className="px-4 py-3 font-medium">Ieșire</th>
+                              <th className="px-4 py-3 font-medium">Status</th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-gray-50">
+                            {historyByDate[date].map(record => (
+                              <tr key={record.id} className="hover:bg-slate-50 transition-colors">
+                                <td className="px-4 py-3 font-semibold text-gray-800">{record.userName}</td>
+                                <td className="px-4 py-3 text-green-700 font-medium">
+                                  {formatTime(record.checkIn)}
+                                </td>
+                                <td className="px-4 py-3 text-red-600 font-medium">
+                                  {record.checkOut ? formatTime(record.checkOut) : '---'}
+                                </td>
+                                <td className="px-4 py-3">
+                                  {record.status === 'active' ? (
+                                    <span className="inline-flex items-center gap-1 px-2 py-1 rounded-md bg-green-50 text-green-700 text-xs font-medium">
+                                      <span className="w-1.5 h-1.5 rounded-full bg-green-500"></span> În curs
+                                    </span>
+                                  ) : (
+                                    <span className="inline-flex items-center gap-1 px-2 py-1 rounded-md bg-slate-100 text-slate-600 text-xs font-medium">
+                                      Finalizat
+                                    </span>
+                                  )}
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
                     </div>
-                `;
-                listDiv.appendChild(item);
-            });
+                  </div>
+                ))
+              )}
+            </div>
+          </section>
 
-            if (Object.keys(data).length === 0) {
-                listDiv.innerHTML = '<p class="text-gray-400 text-sm">Nimeni nu este la muncă momentan.</p>';
-            }
-
-            // Update Buton
-            if (suntPontat) {
-                btn.innerText = "IEȘIRE PROGRAM";
-                btn.className = "w-full py-4 rounded-lg font-bold text-white shadow-lg bg-red-500";
-                btn.onclick = () => remove(ref(db, `prezenta/${myId}`));
-            } else {
-                btn.innerText = "INTRARE PROGRAM";
-                btn.className = "w-full py-4 rounded-lg font-bold text-white shadow-lg bg-blue-600";
-                btn.onclick = () => set(ref(db, `prezenta/${myId}`), { name: myName, since: serverTimestamp() });
-            }
-        });
-
-        window.sterge = (id) => { if(confirm("Elimini persoana?")) remove(ref(db, `prezenta/${id}`)); };
-    </script>
-</body>
-</html>
+        </div>
+      </main>
+    </div>
+  );
+}
