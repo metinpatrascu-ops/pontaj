@@ -1,382 +1,456 @@
-import React, { useState, useEffect, useMemo } from 'react';
-import { initializeApp } from 'firebase/app';
-import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from 'firebase/auth';
-import { getFirestore, collection, onSnapshot, addDoc, updateDoc, doc } from 'firebase/firestore';
-import { Clock, LogIn, LogOut, Users, Calendar, UserCheck, Activity, Search } from 'lucide-react';
-
-// --- Firebase Initialization ---
-const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : {};
-const app = initializeApp(firebaseConfig);
-const auth = getAuth(app);
-const db = getFirestore(app);
-const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
-
-export default function App() {
-  const [authUser, setAuthUser] = useState(null);
-  const [userName, setUserName] = useState('');
-  const [isEntered, setIsEntered] = useState(false);
-  const [records, setRecords] = useState([]);
-  const [isLoading, setIsLoading] = useState(true);
-  const [searchDate, setSearchDate] = useState('');
-
-  // 1. Initialize Authentication
-  useEffect(() => {
-    const initAuth = async () => {
-      try {
-        if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
-          await signInWithCustomToken(auth, __initial_auth_token);
-        } else {
-          await signInAnonymously(auth);
-        }
-      } catch (error) {
-        console.error("Eroare la autentificare:", error);
-      }
-    };
-    initAuth();
-
-    const unsubscribe = onAuthStateChanged(auth, (user) => {
-      setAuthUser(user);
-    });
-    return () => unsubscribe();
-  }, []);
-
-  // 2. Fetch Data from Firestore (Live Updates)
-  useEffect(() => {
-    if (!authUser) return;
-
-    // Fetch all timesheets from public shared data collection
-    const timesheetsRef = collection(db, 'artifacts', appId, 'public', 'data', 'timesheets');
-    
-    const unsubscribe = onSnapshot(timesheetsRef, (snapshot) => {
-      const data = snapshot.docs.map(doc => ({
-        id: doc.id,
-        ...doc.data()
-      }));
-      // Sort in memory (newest first)
-      data.sort((a, b) => new Date(b.checkIn) - new Date(a.checkIn));
-      setRecords(data);
-      setIsLoading(false);
-    }, (error) => {
-      console.error("Eroare la citirea datelor:", error);
-      setIsLoading(false);
-    });
-
-    return () => unsubscribe();
-  }, [authUser]);
-
-  // --- Logic & Helpers ---
+<!DOCTYPE html>
+<html lang="ro">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Pontaj Live</title>
   
-  // Format date correctly in local timezone
-  const getLocalDateString = () => {
-    const date = new Date();
-    // Use YYYY-MM-DD format for logical sorting and grouping
-    return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
-  };
+  <!-- Tailwind CSS pentru Design -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  
+  <!-- FontAwesome pentru Iconițe (înlocuiește lucide-react) -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
 
-  // Find if current user is already working (has active check-in without check-out)
-  const myActiveRecord = useMemo(() => {
-    if (!userName) return null;
-    return records.find(r => 
-      r.userName.toLowerCase() === userName.toLowerCase() && 
-      r.status === 'active'
-    );
-  }, [records, userName]);
+  <!-- React și ReactDOM -->
+  <script crossorigin src="https://unpkg.com/react@18/umd/react.development.js"></script>
+  <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
+  
+  <!-- Babel pentru a citi JSX direct in browser -->
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
 
-  // Filter live workers
-  const liveWorkers = useMemo(() => {
-    return records.filter(r => r.status === 'active');
-  }, [records]);
-
-  // Group history records by Date
-  const historyByDate = useMemo(() => {
-    let filteredRecords = records;
-    if (searchDate) {
-      filteredRecords = records.filter(r => r.date === searchDate);
-    }
-
-    return filteredRecords.reduce((acc, record) => {
-      if (!acc[record.date]) {
-        acc[record.date] = [];
+  <!-- Import Maps pentru Firebase -->
+  <script type="importmap">
+    {
+      "imports": {
+        "firebase/app": "https://www.gstatic.com/firebasejs/10.11.1/firebase-app.js",
+        "firebase/auth": "https://www.gstatic.com/firebasejs/10.11.1/firebase-auth.js",
+        "firebase/firestore": "https://www.gstatic.com/firebasejs/10.11.1/firebase-firestore.js"
       }
-      acc[record.date].push(record);
-      return acc;
-    }, {});
-  }, [records, searchDate]);
-
-  // --- Actions ---
-
-  const handleEnterApp = (e) => {
-    e.preventDefault();
-    if (userName.trim().length >= 2) {
-      setUserName(userName.trim());
-      setIsEntered(true);
     }
-  };
+  </script>
+</head>
+<body class="bg-slate-50">
+  <div id="root"></div>
 
-  const handleCheckIn = async () => {
-    if (!authUser) return;
-    try {
-      const timesheetsRef = collection(db, 'artifacts', appId, 'public', 'data', 'timesheets');
-      const now = new Date();
-      await addDoc(timesheetsRef, {
-        userName: userName,
-        checkIn: now.toISOString(),
-        checkOut: null,
-        date: getLocalDateString(),
-        status: 'active'
-      });
-    } catch (error) {
-      console.error("Eroare la Check-in:", error);
-    }
-  };
+  <script type="text/babel" data-type="module">
+    import { initializeApp } from 'firebase/app';
+    import { getAuth, signInAnonymously, onAuthStateChanged } from 'firebase/auth';
+    import { getFirestore, collection, onSnapshot, addDoc, updateDoc, doc } from 'firebase/firestore';
 
-  const handleCheckOut = async () => {
-    if (!authUser || !myActiveRecord) return;
-    try {
-      const docRef = doc(db, 'artifacts', appId, 'public', 'data', 'timesheets', myActiveRecord.id);
-      await updateDoc(docRef, {
-        checkOut: new Date().toISOString(),
-        status: 'completed'
-      });
-    } catch (error) {
-      console.error("Eroare la Check-out:", error);
-    }
-  };
+    const { useState, useEffect, useMemo } = React;
 
-  const formatTime = (isoString) => {
-    if (!isoString) return '--:--';
-    return new Date(isoString).toLocaleTimeString('ro-RO', { hour: '2-digit', minute: '2-digit' });
-  };
+    // =====================================================================
+    // CONFIGURAȚIA TA FIREBASE CORECTATĂ
+    // =====================================================================
+    const firebaseConfig = {
+      apiKey: "AIzaSyAkTlrR4Sli5jqtP7D80RGxdGFevhkRpOE",
+      authDomain: "pontaj-staff.firebaseapp.com",
+      projectId: "pontaj-staff",
+      storageBucket: "pontaj-staff.firebasestorage.app",
+      messagingSenderId: "684456604284",
+      appId: "1:684456604284:web:b6a000722562624d49cff9",
+      measurementId: "G-LKVSNFKE3H"
+    };
 
-  const formatDateLabel = (dateStr) => {
-    const dateObj = new Date(dateStr);
-    return dateObj.toLocaleDateString('ro-RO', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
-  };
+    // Inițializare Firebase
+    const app = initializeApp(firebaseConfig);
+    const auth = getAuth(app);
+    const db = getFirestore(app);
 
-  // --- UI Renders ---
+    function App() {
+      const [authUser, setAuthUser] = useState(null);
+      const [userName, setUserName] = useState('');
+      const [isEntered, setIsEntered] = useState(false);
+      const [records, setRecords] = useState([]);
+      const [isLoading, setIsLoading] = useState(true);
+      const [searchDate, setSearchDate] = useState('');
+      const [configError, setConfigError] = useState(false);
 
-  if (isLoading) {
-    return (
-      <div className="min-h-screen bg-slate-50 flex items-center justify-center">
-        <div className="flex flex-col items-center text-blue-600 animate-pulse">
-          <Clock size={48} className="mb-4" />
-          <h2 className="text-xl font-semibold">Se încarcă pontajul...</h2>
-        </div>
-      </div>
-    );
-  }
+      // Verifică dacă cheile sunt cele implicite
+      const isConfigMissing = firebaseConfig.apiKey === "PUNE_AICI_API_KEY" || !firebaseConfig.apiKey;
 
-  // LOGIN SCREEN
-  if (!isEntered) {
-    return (
-      <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 flex items-center justify-center p-4">
-        <div className="bg-white rounded-2xl shadow-xl p-8 w-full max-w-md text-center">
-          <div className="w-16 h-16 bg-blue-100 text-blue-600 rounded-full flex items-center justify-center mx-auto mb-6">
-            <Activity size={32} />
-          </div>
-          <h1 className="text-2xl font-bold text-gray-800 mb-2">Aplicație Pontaj Live</h1>
-          <p className="text-gray-500 mb-8">Introdu numele tău pentru a continua</p>
-          
-          <form onSubmit={handleEnterApp} className="space-y-4">
-            <input
-              type="text"
-              placeholder="Ex: Ion Popescu"
-              value={userName}
-              onChange={(e) => setUserName(e.target.value)}
-              className="w-full px-4 py-3 rounded-lg border border-gray-300 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all text-lg"
-              required
-              minLength={2}
-            />
-            <button
-              type="submit"
-              className="w-full bg-blue-600 hover:bg-blue-700 text-white font-semibold py-3 px-4 rounded-lg transition-colors flex items-center justify-center gap-2"
-            >
-              Intră în aplicație <LogIn size={20} />
-            </button>
-          </form>
-        </div>
-      </div>
-    );
-  }
+      // 1. Autentificare Anonimă
+      useEffect(() => {
+        if (isConfigMissing) {
+          setConfigError(true);
+          setIsLoading(false);
+          return;
+        }
 
-  // MAIN DASHBOARD
-  return (
-    <div className="min-h-screen bg-slate-50 pb-12">
-      {/* Header */}
-      <header className="bg-white shadow-sm border-b border-gray-200 sticky top-0 z-10">
-        <div className="max-w-5xl mx-auto px-4 py-4 flex justify-between items-center">
-          <div className="flex items-center gap-2 text-blue-600">
-            <Activity size={24} />
-            <h1 className="text-xl font-bold text-gray-800 hidden sm:block">Pontaj Live</h1>
-          </div>
-          <div className="flex items-center gap-4">
-            <span className="text-gray-600 font-medium flex items-center gap-2">
-              <UserCheck size={18} />
-              Salut, {userName}
-            </span>
-            <button 
-              onClick={() => setIsEntered(false)}
-              className="text-sm text-gray-500 hover:text-red-500 transition-colors"
-            >
-              Schimbă user
-            </button>
-          </div>
-        </div>
-      </header>
+        const initAuth = async () => {
+          try {
+            await signInAnonymously(auth);
+          } catch (error) {
+            console.error("Eroare la autentificare:", error);
+            setConfigError(true);
+            setIsLoading(false);
+          }
+        };
+        initAuth();
 
-      <main className="max-w-5xl mx-auto px-4 mt-8 space-y-6">
+        const unsubscribe = onAuthStateChanged(auth, (user) => {
+          setAuthUser(user);
+        });
+        return () => unsubscribe();
+      }, [isConfigMissing]);
+
+      // 2. Citire Date din Firestore (Live Updates)
+      useEffect(() => {
+        if (!authUser) return;
+
+        // Folosim o colecție numită simplu 'pontaje'
+        const timesheetsRef = collection(db, 'pontaje');
         
-        {/* CHECK IN / OUT SECTION */}
-        <section className="bg-white rounded-2xl shadow-sm border border-gray-200 p-6 sm:p-8 flex flex-col items-center justify-center min-h-[200px]">
-          {myActiveRecord ? (
-            <div className="text-center w-full max-w-md">
-              <div className="mb-4 inline-flex items-center justify-center w-16 h-16 bg-green-100 text-green-600 rounded-full">
-                <Clock size={32} />
-              </div>
-              <h2 className="text-2xl font-bold text-gray-800 mb-2">Ești la muncă</h2>
-              <p className="text-gray-600 mb-8">
-                Ai dat Check-in la ora <span className="font-bold text-gray-900">{formatTime(myActiveRecord.checkIn)}</span>
-              </p>
-              <button
-                onClick={handleCheckOut}
-                className="w-full bg-red-500 hover:bg-red-600 text-white font-bold text-lg py-4 px-6 rounded-xl shadow-lg shadow-red-200 transition-transform active:scale-95 flex items-center justify-center gap-2"
-              >
-                <LogOut size={24} /> Oferă Check-Out (Ieșire)
-              </button>
-            </div>
-          ) : (
-            <div className="text-center w-full max-w-md">
-              <div className="mb-4 inline-flex items-center justify-center w-16 h-16 bg-slate-100 text-slate-500 rounded-full">
-                <LogOut size={32} className="ml-1" />
-              </div>
-              <h2 className="text-2xl font-bold text-gray-800 mb-2">Nu ești pontat activ</h2>
-              <p className="text-gray-600 mb-8">Apasă butonul de mai jos când începi munca.</p>
-              <button
-                onClick={handleCheckIn}
-                className="w-full bg-green-500 hover:bg-green-600 text-white font-bold text-lg py-4 px-6 rounded-xl shadow-lg shadow-green-200 transition-transform active:scale-95 flex items-center justify-center gap-2"
-              >
-                <LogIn size={24} /> Oferă Check-In (Intrare)
-              </button>
-            </div>
-          )}
-        </section>
+        const unsubscribe = onSnapshot(timesheetsRef, (snapshot) => {
+          const data = snapshot.docs.map(doc => ({
+            id: doc.id,
+            ...doc.data()
+          }));
+          // Sortare în memorie (cele mai noi primele)
+          data.sort((a, b) => new Date(b.checkIn) - new Date(a.checkIn));
+          setRecords(data);
+          setIsLoading(false);
+        }, (error) => {
+          console.error("Eroare la citirea datelor. Asigură-te că ai regulile Firestore deschise pentru scriere/citire:", error);
+          setIsLoading(false);
+        });
 
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          
-          {/* LIVE WORKERS SECTION */}
-          <section className="lg:col-span-1 bg-white rounded-2xl shadow-sm border border-gray-200 overflow-hidden flex flex-col h-[500px]">
-            <div className="bg-blue-50 border-b border-blue-100 p-4 flex items-center gap-2">
-              <Users className="text-blue-600" size={20} />
-              <h3 className="font-bold text-gray-800">Cine e la muncă acum?</h3>
-              <span className="ml-auto bg-blue-600 text-white text-xs font-bold px-2.5 py-1 rounded-full">
-                {liveWorkers.length}
-              </span>
-            </div>
-            
-            <div className="overflow-y-auto flex-1 p-4">
-              {liveWorkers.length === 0 ? (
-                <div className="text-center text-gray-500 mt-10">
-                  <p>Nimeni nu este pontat în acest moment.</p>
-                </div>
-              ) : (
-                <ul className="space-y-3">
-                  {liveWorkers.map(worker => (
-                    <li key={worker.id} className="flex items-center justify-between bg-slate-50 p-3 rounded-lg border border-slate-100">
-                      <div className="flex items-center gap-3">
-                        <div className="w-10 h-10 rounded-full bg-blue-100 text-blue-600 flex items-center justify-center font-bold text-sm">
-                          {worker.userName.substring(0, 2).toUpperCase()}
-                        </div>
-                        <div>
-                          <p className="font-semibold text-gray-800">{worker.userName}</p>
-                          <p className="text-xs text-green-600 flex items-center gap-1">
-                            <span className="w-2 h-2 rounded-full bg-green-500 animate-pulse"></span>
-                            Online (de la {formatTime(worker.checkIn)})
-                          </p>
-                        </div>
-                      </div>
-                    </li>
-                  ))}
-                </ul>
-              )}
-            </div>
-          </section>
+        return () => unsubscribe();
+      }, [authUser]);
 
-          {/* HISTORY SECTION */}
-          <section className="lg:col-span-2 bg-white rounded-2xl shadow-sm border border-gray-200 overflow-hidden flex flex-col h-[500px]">
-            <div className="bg-slate-50 border-b border-gray-200 p-4 flex flex-col sm:flex-row items-center justify-between gap-4">
-              <div className="flex items-center gap-2">
-                <Calendar className="text-slate-600" size={20} />
-                <h3 className="font-bold text-gray-800">Istoric complet pontaj</h3>
+      // --- Logică & Funcții Utilitare ---
+      
+      const getLocalDateString = () => {
+        const date = new Date();
+        return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+      };
+
+      const myActiveRecord = useMemo(() => {
+        if (!userName) return null;
+        return records.find(r => 
+          r.userName.toLowerCase() === userName.toLowerCase() && 
+          r.status === 'active'
+        );
+      }, [records, userName]);
+
+      const liveWorkers = useMemo(() => {
+        return records.filter(r => r.status === 'active');
+      }, [records]);
+
+      const historyByDate = useMemo(() => {
+        let filteredRecords = records;
+        if (searchDate) {
+          filteredRecords = records.filter(r => r.date === searchDate);
+        }
+
+        return filteredRecords.reduce((acc, record) => {
+          if (!acc[record.date]) {
+            acc[record.date] = [];
+          }
+          acc[record.date].push(record);
+          return acc;
+        }, {});
+      }, [records, searchDate]);
+
+      // --- Acțiuni ---
+
+      const handleEnterApp = (e) => {
+        e.preventDefault();
+        if (userName.trim().length >= 2) {
+          setUserName(userName.trim());
+          setIsEntered(true);
+        }
+      };
+
+      const handleCheckIn = async () => {
+        if (!authUser) return;
+        try {
+          const timesheetsRef = collection(db, 'pontaje');
+          const now = new Date();
+          await addDoc(timesheetsRef, {
+            userName: userName,
+            checkIn: now.toISOString(),
+            checkOut: null,
+            date: getLocalDateString(),
+            status: 'active'
+          });
+        } catch (error) {
+          console.error("Eroare la Check-in:", error);
+          alert("Eroare la salvare. Verifică setările bazei de date Firebase!");
+        }
+      };
+
+      const handleCheckOut = async () => {
+        if (!authUser || !myActiveRecord) return;
+        try {
+          const docRef = doc(db, 'pontaje', myActiveRecord.id);
+          await updateDoc(docRef, {
+            checkOut: new Date().toISOString(),
+            status: 'completed'
+          });
+        } catch (error) {
+          console.error("Eroare la Check-out:", error);
+        }
+      };
+
+      const formatTime = (isoString) => {
+        if (!isoString) return '--:--';
+        return new Date(isoString).toLocaleTimeString('ro-RO', { hour: '2-digit', minute: '2-digit' });
+      };
+
+      const formatDateLabel = (dateStr) => {
+        const dateObj = new Date(dateStr);
+        return dateObj.toLocaleDateString('ro-RO', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
+      };
+
+      // --- Render UI ---
+
+      if (configError || isConfigMissing) {
+        return (
+          <div className="min-h-screen bg-slate-50 flex items-center justify-center p-4">
+            <div className="bg-white rounded-2xl shadow-xl p-8 max-w-2xl w-full border-l-4 border-red-500">
+               <h2 className="text-2xl font-bold text-red-600 mb-4"><i className="fas fa-exclamation-triangle"></i> Configurare Firebase Lipsă sau Invalidă</h2>
+               <p className="text-gray-700 mb-4">Aplicația a întâmpinat o eroare de conectare la baza de date. Acest lucru se întâmplă pentru că nu ai pus setările tale reale de la Firebase în cod, sau cheia (API Key) introdusă este invalidă.</p>
+               <ol className="list-decimal pl-5 space-y-3 text-gray-600">
+                  <li>Mergi la consola ta Firebase (<a href="https://console.firebase.google.com" target="_blank" className="text-blue-600 font-semibold underline">console.firebase.google.com</a>).</li>
+                  <li>Apasă pe iconița cu rotiță dințată (Setări) din stânga sus și alege <strong>Project Settings</strong>.</li>
+                  <li>Coboară până la secțiunea "Your apps" (sau secțiunea SDK setup / configuration).</li>
+                  <li>Acolo vei vedea un cod care conține <code>apiKey</code>, <code>projectId</code>, etc. Copiază acele șiruri de litere și cifre.</li>
+                  <li>Mergi pe GitHub, editează fișierul <code>index.html</code> și înlocuiește textele mele (ex: "PUNE_AICI_API_KEY") exact cu valorile tale. Asigură-te că păstrezi ghilimelele!</li>
+               </ol>
+            </div>
+          </div>
+        );
+      }
+
+      if (isLoading) {
+        return (
+          <div className="min-h-screen bg-slate-50 flex items-center justify-center">
+            <div className="flex flex-col items-center text-blue-600">
+              <i className="fas fa-spinner fa-spin text-4xl mb-4"></i>
+              <h2 className="text-xl font-semibold animate-pulse">Se conectează la baza de date...</h2>
+            </div>
+          </div>
+        );
+      }
+
+      // ECRAN LOGARE
+      if (!isEntered) {
+        return (
+          <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 flex items-center justify-center p-4">
+            <div className="bg-white rounded-2xl shadow-xl p-8 w-full max-w-md text-center">
+              <div className="w-16 h-16 bg-blue-100 text-blue-600 rounded-full flex items-center justify-center mx-auto mb-6">
+                <i className="fas fa-chart-line text-2xl"></i>
               </div>
-              <div className="relative">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={16} />
-                <input 
-                  type="date" 
-                  value={searchDate}
-                  onChange={(e) => setSearchDate(e.target.value)}
-                  className="pl-9 pr-3 py-1.5 text-sm rounded-lg border border-gray-300 focus:ring-blue-500 focus:border-blue-500 w-full sm:w-auto"
+              <h1 className="text-2xl font-bold text-gray-800 mb-2">Aplicație Pontaj Live</h1>
+              <p className="text-gray-500 mb-8">Introdu numele tău pentru a continua</p>
+              
+              <form onSubmit={handleEnterApp} className="space-y-4">
+                <input
+                  type="text"
+                  placeholder="Ex: Ion Popescu"
+                  value={userName}
+                  onChange={(e) => setUserName(e.target.value)}
+                  className="w-full px-4 py-3 rounded-lg border border-gray-300 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all text-lg"
+                  required
+                  minLength={2}
                 />
+                <button
+                  type="submit"
+                  className="w-full bg-blue-600 hover:bg-blue-700 text-white font-semibold py-3 px-4 rounded-lg transition-colors flex items-center justify-center gap-2"
+                >
+                  Intră în aplicație <i className="fas fa-sign-in-alt"></i>
+                </button>
+              </form>
+            </div>
+          </div>
+        );
+      }
+
+      // ECRAN PRINCIPAL
+      return (
+        <div className="min-h-screen bg-slate-50 pb-12">
+          {/* Header */}
+          <header className="bg-white shadow-sm border-b border-gray-200 sticky top-0 z-10">
+            <div className="max-w-5xl mx-auto px-4 py-4 flex justify-between items-center">
+              <div className="flex items-center gap-2 text-blue-600">
+                <i className="fas fa-chart-line text-xl"></i>
+                <h1 className="text-xl font-bold text-gray-800 hidden sm:block">Pontaj Live</h1>
+              </div>
+              <div className="flex items-center gap-4">
+                <span className="text-gray-600 font-medium flex items-center gap-2">
+                  <i className="fas fa-user-check"></i>
+                  Salut, {userName}
+                </span>
+                <button 
+                  onClick={() => setIsEntered(false)}
+                  className="text-sm text-gray-500 hover:text-red-500 transition-colors"
+                >
+                  Schimbă user
+                </button>
               </div>
             </div>
+          </header>
 
-            <div className="overflow-y-auto flex-1 p-4 bg-slate-50/50">
-              {Object.keys(historyByDate).length === 0 ? (
-                <div className="text-center text-gray-500 mt-10">
-                  <p>Nu există date de pontaj pentru acest filtru.</p>
+          <main className="max-w-5xl mx-auto px-4 mt-8 space-y-6">
+            
+            {/* CHECK IN / OUT SECTION */}
+            <section className="bg-white rounded-2xl shadow-sm border border-gray-200 p-6 sm:p-8 flex flex-col items-center justify-center min-h-[200px]">
+              {myActiveRecord ? (
+                <div className="text-center w-full max-w-md">
+                  <div className="mb-4 inline-flex items-center justify-center w-16 h-16 bg-green-100 text-green-600 rounded-full">
+                    <i className="fas fa-clock text-2xl"></i>
+                  </div>
+                  <h2 className="text-2xl font-bold text-gray-800 mb-2">Ești la muncă</h2>
+                  <p className="text-gray-600 mb-8">
+                    Ai dat Check-in la ora <span className="font-bold text-gray-900">{formatTime(myActiveRecord.checkIn)}</span>
+                  </p>
+                  <button
+                    onClick={handleCheckOut}
+                    className="w-full bg-red-500 hover:bg-red-600 text-white font-bold text-lg py-4 px-6 rounded-xl shadow-lg shadow-red-200 transition-transform active:scale-95 flex items-center justify-center gap-2"
+                  >
+                    <i className="fas fa-sign-out-alt"></i> Oferă Check-Out (Ieșire)
+                  </button>
                 </div>
               ) : (
-                Object.keys(historyByDate).sort((a, b) => new Date(b) - new Date(a)).map(date => (
-                  <div key={date} className="mb-6 last:mb-0">
-                    <h4 className="text-sm font-bold text-slate-500 uppercase tracking-wider mb-3 flex items-center gap-2 before:content-[''] before:h-px before:flex-1 before:bg-slate-200 after:content-[''] after:h-px after:flex-1 after:bg-slate-200">
-                      {formatDateLabel(date)}
-                    </h4>
-                    
-                    <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
-                      <div className="overflow-x-auto">
-                        <table className="w-full text-left text-sm whitespace-nowrap">
-                          <thead className="bg-slate-50 border-b border-gray-100 text-slate-600">
-                            <tr>
-                              <th className="px-4 py-3 font-medium">Nume</th>
-                              <th className="px-4 py-3 font-medium">Intrare</th>
-                              <th className="px-4 py-3 font-medium">Ieșire</th>
-                              <th className="px-4 py-3 font-medium">Status</th>
-                            </tr>
-                          </thead>
-                          <tbody className="divide-y divide-gray-50">
-                            {historyByDate[date].map(record => (
-                              <tr key={record.id} className="hover:bg-slate-50 transition-colors">
-                                <td className="px-4 py-3 font-semibold text-gray-800">{record.userName}</td>
-                                <td className="px-4 py-3 text-green-700 font-medium">
-                                  {formatTime(record.checkIn)}
-                                </td>
-                                <td className="px-4 py-3 text-red-600 font-medium">
-                                  {record.checkOut ? formatTime(record.checkOut) : '---'}
-                                </td>
-                                <td className="px-4 py-3">
-                                  {record.status === 'active' ? (
-                                    <span className="inline-flex items-center gap-1 px-2 py-1 rounded-md bg-green-50 text-green-700 text-xs font-medium">
-                                      <span className="w-1.5 h-1.5 rounded-full bg-green-500"></span> În curs
-                                    </span>
-                                  ) : (
-                                    <span className="inline-flex items-center gap-1 px-2 py-1 rounded-md bg-slate-100 text-slate-600 text-xs font-medium">
-                                      Finalizat
-                                    </span>
-                                  )}
-                                </td>
-                              </tr>
-                            ))}
-                          </tbody>
-                        </table>
-                      </div>
-                    </div>
+                <div className="text-center w-full max-w-md">
+                  <div className="mb-4 inline-flex items-center justify-center w-16 h-16 bg-slate-100 text-slate-500 rounded-full">
+                    <i className="fas fa-sign-out-alt text-2xl"></i>
                   </div>
-                ))
+                  <h2 className="text-2xl font-bold text-gray-800 mb-2">Nu ești pontat activ</h2>
+                  <p className="text-gray-600 mb-8">Apasă butonul de mai jos când începi munca.</p>
+                  <button
+                    onClick={handleCheckIn}
+                    className="w-full bg-green-500 hover:bg-green-600 text-white font-bold text-lg py-4 px-6 rounded-xl shadow-lg shadow-green-200 transition-transform active:scale-95 flex items-center justify-center gap-2"
+                  >
+                    <i className="fas fa-sign-in-alt"></i> Oferă Check-In (Intrare)
+                  </button>
+                </div>
               )}
-            </div>
-          </section>
+            </section>
 
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+              
+              {/* LIVE WORKERS SECTION */}
+              <section className="lg:col-span-1 bg-white rounded-2xl shadow-sm border border-gray-200 overflow-hidden flex flex-col h-[500px]">
+                <div className="bg-blue-50 border-b border-blue-100 p-4 flex items-center gap-2">
+                  <i className="fas fa-users text-blue-600"></i>
+                  <h3 className="font-bold text-gray-800">Cine e la muncă acum?</h3>
+                  <span className="ml-auto bg-blue-600 text-white text-xs font-bold px-2.5 py-1 rounded-full">
+                    {liveWorkers.length}
+                  </span>
+                </div>
+                
+                <div className="overflow-y-auto flex-1 p-4">
+                  {liveWorkers.length === 0 ? (
+                    <div className="text-center text-gray-500 mt-10">
+                      <p>Nimeni nu este pontat în acest moment.</p>
+                    </div>
+                  ) : (
+                    <ul className="space-y-3">
+                      {liveWorkers.map(worker => (
+                        <li key={worker.id} className="flex items-center justify-between bg-slate-50 p-3 rounded-lg border border-slate-100">
+                          <div className="flex items-center gap-3">
+                            <div className="w-10 h-10 rounded-full bg-blue-100 text-blue-600 flex items-center justify-center font-bold text-sm">
+                              {worker.userName.substring(0, 2).toUpperCase()}
+                            </div>
+                            <div>
+                              <p className="font-semibold text-gray-800">{worker.userName}</p>
+                              <p className="text-xs text-green-600 flex items-center gap-1">
+                                <span className="w-2 h-2 rounded-full bg-green-500 animate-pulse"></span>
+                                Online (de la {formatTime(worker.checkIn)})
+                              </p>
+                            </div>
+                          </div>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </div>
+              </section>
+
+              {/* HISTORY SECTION */}
+              <section className="lg:col-span-2 bg-white rounded-2xl shadow-sm border border-gray-200 overflow-hidden flex flex-col h-[500px]">
+                <div className="bg-slate-50 border-b border-gray-200 p-4 flex flex-col sm:flex-row items-center justify-between gap-4">
+                  <div className="flex items-center gap-2">
+                    <i className="far fa-calendar-alt text-slate-600"></i>
+                    <h3 className="font-bold text-gray-800">Istoric complet pontaj</h3>
+                  </div>
+                  <div className="relative">
+                    <i className="fas fa-search absolute left-3 top-1/2 -translate-y-1/2 text-gray-400"></i>
+                    <input 
+                      type="date" 
+                      value={searchDate}
+                      onChange={(e) => setSearchDate(e.target.value)}
+                      className="pl-9 pr-3 py-1.5 text-sm rounded-lg border border-gray-300 focus:ring-blue-500 focus:border-blue-500 w-full sm:w-auto"
+                    />
+                  </div>
+                </div>
+
+                <div className="overflow-y-auto flex-1 p-4 bg-slate-50/50">
+                  {Object.keys(historyByDate).length === 0 ? (
+                    <div className="text-center text-gray-500 mt-10">
+                      <p>Nu există date de pontaj pentru acest filtru.</p>
+                    </div>
+                  ) : (
+                    Object.keys(historyByDate).sort((a, b) => new Date(b) - new Date(a)).map(date => (
+                      <div key={date} className="mb-6 last:mb-0">
+                        <h4 className="text-sm font-bold text-slate-500 uppercase tracking-wider mb-3 flex items-center gap-2 before:content-[''] before:h-px before:flex-1 before:bg-slate-200 after:content-[''] after:h-px after:flex-1 after:bg-slate-200">
+                          {formatDateLabel(date)}
+                        </h4>
+                        
+                        <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+                          <div className="overflow-x-auto">
+                            <table className="w-full text-left text-sm whitespace-nowrap">
+                              <thead className="bg-slate-50 border-b border-gray-100 text-slate-600">
+                                <tr>
+                                  <th className="px-4 py-3 font-medium">Nume</th>
+                                  <th className="px-4 py-3 font-medium">Intrare</th>
+                                  <th className="px-4 py-3 font-medium">Ieșire</th>
+                                  <th className="px-4 py-3 font-medium">Status</th>
+                                </tr>
+                              </thead>
+                              <tbody className="divide-y divide-gray-50">
+                                {historyByDate[date].map(record => (
+                                  <tr key={record.id} className="hover:bg-slate-50 transition-colors">
+                                    <td className="px-4 py-3 font-semibold text-gray-800">{record.userName}</td>
+                                    <td className="px-4 py-3 text-green-700 font-medium">
+                                      {formatTime(record.checkIn)}
+                                    </td>
+                                    <td className="px-4 py-3 text-red-600 font-medium">
+                                      {record.checkOut ? formatTime(record.checkOut) : '---'}
+                                    </td>
+                                    <td className="px-4 py-3">
+                                      {record.status === 'active' ? (
+                                        <span className="inline-flex items-center gap-1 px-2 py-1 rounded-md bg-green-50 text-green-700 text-xs font-medium">
+                                          <span className="w-1.5 h-1.5 rounded-full bg-green-500"></span> În curs
+                                        </span>
+                                      ) : (
+                                        <span className="inline-flex items-center gap-1 px-2 py-1 rounded-md bg-slate-100 text-slate-600 text-xs font-medium">
+                                          Finalizat
+                                        </span>
+                                      )}
+                                    </td>
+                                  </tr>
+                                ))}
+                              </tbody>
+                            </table>
+                          </div>
+                        </div>
+                      </div>
+                    ))
+                  )}
+                </div>
+              </section>
+
+            </div>
+          </main>
         </div>
-      </main>
-    </div>
-  );
-}
+      );
+    }
+
+    const root = ReactDOM.createRoot(document.getElementById('root'));
+    root.render(<App />);
+  </script>
+</body>
+</html>
