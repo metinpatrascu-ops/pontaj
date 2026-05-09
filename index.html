@@ -3,102 +3,78 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Sistem Pontaj Echipa</title>
+    <title>Sistem Pontaj Echipa - LIVE</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://unpkg.com/lucide@latest"></script>
     <style>
         body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
-        .pulse-ring { animation: pulse-ring 2s cubic-bezier(0.215, 0.61, 0.355, 1) infinite; }
-        @keyframes pulse-ring {
-            0% { transform: scale(0.8); opacity: 0.5; }
-            80%, 100% { transform: scale(2.5); opacity: 0; }
-        }
+        .pulse-ring { animation: pulse-ring 2s infinite; }
+        @keyframes pulse-ring { 0% { opacity: 0.5; } 100% { opacity: 1; } }
         .hidden { display: none !important; }
     </style>
 </head>
-<body class="bg-slate-50 text-slate-800 min-h-screen pb-12">
+<body class="bg-slate-100 text-slate-800 min-h-screen pb-10">
 
-    <div id="loadingScreen" class="fixed inset-0 bg-slate-50 flex items-center justify-center z-50">
-        <div class="animate-pulse flex flex-col items-center">
-            <i data-lucide="clock" class="w-12 h-12 text-blue-500 mb-4 animate-spin"></i>
-            <p class="text-slate-500 font-medium">Se încarcă sistemul...</p>
+    <!-- Incarcare -->
+    <div id="loadingScreen" class="fixed inset-0 bg-white flex items-center justify-center z-50">
+        <div class="text-center">
+            <div class="w-10 h-10 border-4 border-blue-500 border-t-transparent rounded-full animate-spin mx-auto mb-2"></div>
+            <p class="text-slate-500 text-sm">Se conectează la baza de date...</p>
         </div>
     </div>
 
-    <div id="mainContent" class="max-w-4xl mx-auto px-4 pt-8 hidden">
-        <header class="flex flex-col md:flex-row md:items-center justify-between mb-8 gap-4">
-            <div>
-                <h1 class="text-3xl font-bold text-slate-900 flex items-center gap-3">
-                    <i data-lucide="calendar-check" class="text-blue-600"></i> Sistem Pontaj Staff
-                </h1>
-                <p id="currentDateDisplay" class="text-slate-500 mt-1 font-medium"></p>
-            </div>
-            <div id="userInfo" class="bg-white p-3 rounded-xl shadow-sm border border-slate-200 flex items-center gap-3">
-                <div class="w-10 h-10 bg-blue-100 rounded-full flex items-center justify-center text-blue-700 font-bold" id="userInitial">?</div>
-                <div>
-                    <p class="text-sm font-bold text-slate-800" id="userName">Utilizator</p>
-                    <button id="logoutBtn" class="text-xs text-red-500 hover:underline font-medium">Deconectare</button>
-                </div>
+    <div id="mainContent" class="max-w-4xl mx-auto px-4 pt-6 hidden">
+        <header class="flex justify-between items-center mb-6">
+            <h1 class="text-2xl font-bold text-slate-900 flex items-center gap-2">
+                <i data-lucide="clock" class="text-blue-600"></i> Pontaj Live
+            </h1>
+            <div class="flex items-center gap-3 bg-white p-2 rounded-lg shadow-sm">
+                <span id="userName" class="font-bold text-sm"></span>
+                <button id="logoutBtn" class="text-rose-500"><i data-lucide="log-out" class="w-4 h-4"></i></button>
             </div>
         </header>
 
-        <div class="bg-white rounded-3xl shadow-xl border border-slate-200 overflow-hidden mb-8">
-            <div class="p-6 md:p-8">
-                <div class="flex flex-col md:flex-row items-center justify-between gap-6">
-                    <div class="text-center md:text-left">
-                        <h2 class="text-xl font-bold text-slate-800 mb-1">Statusul tău astăzi</h2>
-                        <div id="statusBadge" class="inline-flex items-center px-3 py-1 rounded-full text-sm font-bold bg-slate-100 text-slate-500">Nepontat</div>
-                    </div>
-                    <div class="flex flex-col md:flex-row gap-3 w-full md:w-auto">
-                        <button id="checkInBtn" class="flex-1 bg-blue-600 hover:bg-blue-700 text-white px-8 py-4 rounded-2xl font-bold transition-all active:scale-95 flex items-center justify-center gap-2">
-                            <i data-lucide="play" class="w-5 h-5"></i> ÎNCEPE PROGRAMUL
-                        </button>
-                        <button id="checkOutBtn" class="flex-1 bg-rose-500 hover:bg-rose-600 text-white px-8 py-4 rounded-2xl font-bold transition-all active:scale-95 hidden flex items-center justify-center gap-2">
-                            <i data-lucide="square" class="w-5 h-5"></i> ÎNCHEIE PROGRAMUL
-                        </button>
-                    </div>
-                </div>
-            </div>
-            <div id="timerContainer" class="bg-slate-50 border-t border-slate-100 p-4 text-center hidden">
-                <div id="timerDisplay" class="text-2xl font-mono font-bold text-blue-600">00:00:00</div>
+        <!-- Sectiune Butoane -->
+        <div class="bg-white rounded-2xl shadow-sm border p-6 mb-6 text-center">
+            <div id="statusBadge" class="mb-4 inline-block px-3 py-1 rounded-full text-xs font-bold bg-slate-100 uppercase tracking-wider">Deconectat</div>
+            <div class="flex gap-4">
+                <button id="checkInBtn" class="flex-1 bg-blue-600 text-white py-4 rounded-xl font-bold hover:bg-blue-700 transition-all">INTRARE</button>
+                <button id="checkOutBtn" class="flex-1 bg-rose-500 text-white py-4 rounded-xl font-bold hover:bg-rose-600 transition-all hidden">IEȘIRE</button>
             </div>
         </div>
 
-        <div class="bg-white rounded-3xl shadow-lg border border-slate-200 overflow-hidden">
-            <div class="px-6 py-4 border-b border-slate-100 flex items-center justify-between">
-                <h3 class="font-bold text-slate-800">Activitate echipa (Azi)</h3>
-            </div>
+        <!-- Tabel Live -->
+        <div class="bg-white rounded-2xl shadow-sm border overflow-hidden">
+            <div class="p-4 border-b bg-slate-50 font-bold text-sm">ACTIVITATE ECHIPA - AZI</div>
             <div class="overflow-x-auto">
                 <table class="w-full text-left">
-                    <thead class="bg-slate-50">
+                    <thead class="text-xs text-slate-400 uppercase bg-slate-50">
                         <tr>
-                            <th class="px-6 py-4 text-xs font-bold text-slate-400 uppercase">Nume</th>
-                            <th class="px-6 py-4 text-xs font-bold text-slate-400 uppercase text-green-600">Intrare</th>
-                            <th class="px-6 py-4 text-xs font-bold text-slate-400 uppercase text-rose-500">Ieșire</th>
-                            <th class="px-6 py-4 text-xs font-bold text-slate-400 uppercase">Total</th>
+                            <th class="p-4">Nume</th>
+                            <th class="p-4">Intrare</th>
+                            <th class="p-4">Ieșire</th>
+                            <th class="p-4 text-right">Acțiuni</th>
                         </tr>
                     </thead>
-                    <tbody id="historyTableBody" class="divide-y divide-slate-100"></tbody>
+                    <tbody id="liveTable" class="divide-y text-sm"></tbody>
                 </table>
             </div>
         </div>
     </div>
 
-    <div id="authModal" class="fixed inset-0 bg-slate-900/40 backdrop-blur-sm flex items-center justify-center z-40 p-4 hidden">
-        <div class="bg-white rounded-3xl max-w-md w-full p-8">
-            <div class="text-center mb-8">
-                <h2 class="text-2xl font-bold">Bun venit!</h2>
-                <p class="text-slate-500 mt-2">Introdu numele tău complet.</p>
-            </div>
-            <input type="text" id="userInputName" placeholder="Ex: Metin Patrascu" class="w-full px-6 py-4 rounded-2xl bg-slate-50 border border-slate-200 mb-4">
-            <button id="loginBtn" class="w-full bg-slate-900 text-white py-4 rounded-2xl font-bold">ACCESEAZĂ</button>
+    <!-- Login -->
+    <div id="authModal" class="fixed inset-0 bg-slate-900/50 backdrop-blur-sm flex items-center justify-center z-40 hidden">
+        <div class="bg-white p-8 rounded-3xl max-w-sm w-full shadow-2xl">
+            <h2 class="text-xl font-bold mb-4">Cine ești?</h2>
+            <input type="text" id="nameInput" placeholder="Numele tău complet" class="w-full p-4 border rounded-xl mb-4 focus:ring-2 focus:ring-blue-500 outline-none">
+            <button id="loginBtn" class="w-full bg-slate-900 text-white py-4 rounded-xl font-bold">LOGARE</button>
         </div>
     </div>
 
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
         import { getAuth, signInAnonymously, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
-        import { getDatabase, ref, set, onValue, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-database.js";
+        import { getDatabase, ref, set, onValue, remove, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-database.js";
 
         const firebaseConfig = {
             apiKey: "AIzaSyAkTlrR4Sli5jqtP7D80RGxdGFevhkRpOE",
@@ -106,140 +82,118 @@
             projectId: "pontaj-staff",
             storageBucket: "pontaj-staff.firebasestorage.app",
             messagingSenderId: "684456604284",
-            appId: "1:684456604284:web:b6a000722562624d49cff9",
-            measurementId: "G-LKVSNFKE3H"
+            appId: "1:684456604284:web:b6a000722562624d49cff9"
         };
 
         const app = initializeApp(firebaseConfig);
         const auth = getAuth(app);
         const db = getDatabase(app);
+        const ADMIN_NAME = "Metin Patrascu";
 
         const dom = {
             loading: document.getElementById('loadingScreen'),
             main: document.getElementById('mainContent'),
-            authModal: document.getElementById('authModal'),
-            nameInput: document.getElementById('userInputName'),
-            loginBtn: document.getElementById('loginBtn'),
-            userName: document.getElementById('userName'),
-            userInitial: document.getElementById('userInitial'),
-            currentDate: document.getElementById('currentDateDisplay'),
-            historyTableBody: document.getElementById('historyTableBody'),
-            checkInBtn: document.getElementById('checkInBtn'),
-            checkOutBtn: document.getElementById('checkOutBtn'),
-            statusBadge: document.getElementById('statusBadge'),
-            timerContainer: document.getElementById('timerContainer'),
-            timerDisplay: document.getElementById('timerDisplay'),
-            logoutBtn: document.getElementById('logoutBtn')
+            auth: document.getElementById('authModal'),
+            table: document.getElementById('liveTable'),
+            status: document.getElementById('statusBadge')
         };
 
-        let timerInterval = null;
+        onAuthStateChanged(auth, (user) => {
+            const name = localStorage.getItem('user_name');
+            if (user && name) {
+                startApp(name);
+            } else {
+                dom.loading.classList.add('hidden');
+                dom.auth.classList.remove('hidden');
+            }
+        });
 
-        async function init() {
-            lucide.createIcons();
-            dom.currentDate.innerText = new Date().toLocaleDateString('ro-RO', { weekday: 'long', day: 'numeric', month: 'long' });
-
-            onAuthStateChanged(auth, (user) => {
-                const savedName = localStorage.getItem('user_name');
-                if (user && savedName) {
-                    setupApp(savedName);
-                } else {
-                    dom.loading.classList.add('hidden');
-                    dom.authModal.classList.remove('hidden');
-                }
-            });
-        }
-
-        function setupApp(name) {
-            dom.userName.innerText = name;
-            dom.userInitial.innerText = name.charAt(0).toUpperCase();
-            dom.authModal.classList.add('hidden');
-            dom.loading.classList.add('hidden');
-            dom.main.classList.remove('hidden');
-            listenToData();
-        }
-
-        dom.loginBtn.onclick = async () => {
-            const name = dom.nameInput.value.trim();
-            if (name.length < 3) return alert("Nume prea scurt!");
+        document.getElementById('loginBtn').onclick = async () => {
+            const name = document.getElementById('nameInput').value.trim();
+            if (name.length < 3) return alert("Numele este prea scurt!");
             localStorage.setItem('user_name', name);
             await signInAnonymously(auth);
-            setupApp(name);
+            startApp(name);
         };
 
-        dom.logoutBtn.onclick = () => {
-            signOut(auth);
+        document.getElementById('logoutBtn').onclick = () => {
             localStorage.clear();
-            location.reload();
+            signOut(auth).then(() => location.reload());
         };
 
-        dom.checkInBtn.onclick = async () => {
-            const name = localStorage.getItem('user_name');
-            const id = name.replace(/\s+/g, '_').toLowerCase();
-            const today = new Date().toISOString().split('T')[0];
-            await set(ref(db, `pontaje/${today}/${id}`), {
-                name, checkIn: serverTimestamp(), checkOut: null, date: today
-            });
-        };
+        function startApp(name) {
+            dom.auth.classList.add('hidden');
+            dom.loading.classList.add('hidden');
+            dom.main.classList.remove('hidden');
+            document.getElementById('userName').innerText = name;
+            lucide.createIcons();
+            listenLive();
+        }
 
-        dom.checkOutBtn.onclick = async () => {
-            const name = localStorage.getItem('user_name');
-            const id = name.replace(/\s+/g, '_').toLowerCase();
-            const today = new Date().toISOString().split('T')[0];
-            await set(ref(db, `pontaje/${today}/${id}/checkOut`), serverTimestamp());
-        };
+        const getTodayPath = () => `pontaje/${new Date().toISOString().split('T')[0]}`;
 
-        function listenToData() {
-            const today = new Date().toISOString().split('T')[0];
-            const myId = localStorage.getItem('user_name').replace(/\s+/g, '_').toLowerCase();
+        function listenLive() {
+            const myName = localStorage.getItem('user_name');
+            const myId = myName.replace(/\s+/g, '_').toLowerCase();
 
-            onValue(ref(db, `pontaje/${today}`), (snap) => {
+            onValue(ref(db, getTodayPath()), (snap) => {
                 const data = snap.val() || {};
-                dom.historyTableBody.innerHTML = "";
+                dom.table.innerHTML = "";
                 
                 Object.entries(data).forEach(([id, p]) => {
-                    if (id === myId) updateMyStatus(p);
-                    
-                    const row = `<tr>
-                        <td class="px-6 py-4 font-bold">${p.name}</td>
-                        <td class="px-6 py-4 text-green-600 font-mono">${fmt(p.checkIn)}</td>
-                        <td class="px-6 py-4 text-rose-500 font-mono">${fmt(p.checkOut)}</td>
-                        <td class="px-6 py-4 font-bold">${dur(p.checkIn, p.checkOut)}</td>
-                    </tr>`;
-                    dom.historyTableBody.innerHTML += row;
+                    // Update butoane pentru mine
+                    if (id === myId) {
+                        if (p.checkIn && !p.checkOut) {
+                            dom.status.innerText = "Sunteți la muncă";
+                            dom.status.className = "mb-4 inline-block px-3 py-1 rounded-full text-xs font-bold bg-green-100 text-green-700 pulse-ring uppercase tracking-wider";
+                            document.getElementById('checkInBtn').classList.add('hidden');
+                            document.getElementById('checkOutBtn').classList.remove('hidden');
+                        } else {
+                            dom.status.innerText = "Program încheiat";
+                            dom.status.className = "mb-4 inline-block px-3 py-1 rounded-full text-xs font-bold bg-slate-100 text-slate-400 uppercase tracking-wider";
+                            document.getElementById('checkInBtn').classList.add('hidden');
+                            document.getElementById('checkOutBtn').classList.add('hidden');
+                        }
+                    }
+
+                    // Generare rand tabel
+                    const isAdmin = myName === ADMIN_NAME;
+                    const row = document.createElement('tr');
+                    row.innerHTML = `
+                        <td class="p-4 font-bold">${p.name}</td>
+                        <td class="p-4 text-green-600 font-mono">${fmt(p.checkIn)}</td>
+                        <td class="p-4 text-rose-500 font-mono">${fmt(p.checkOut)}</td>
+                        <td class="p-4 text-right">
+                            ${isAdmin ? `<button onclick="window.deleteEntry('${id}')" class="text-slate-300 hover:text-red-500"><i data-lucide="trash-2" class="w-4 h-4"></i></button>` : ''}
+                        </td>
+                    `;
+                    dom.table.appendChild(row);
                 });
+                lucide.createIcons();
             });
         }
 
-        function updateMyStatus(p) {
-            if (p.checkIn && !p.checkOut) {
-                dom.statusBadge.innerText = "În lucru";
-                dom.statusBadge.className = "px-3 py-1 rounded-full bg-green-100 text-green-700 pulse-ring font-bold";
-                dom.checkInBtn.classList.add('hidden');
-                dom.checkOutBtn.classList.remove('hidden');
-                runTimer(p.checkIn);
-            } else if (p.checkOut) {
-                dom.statusBadge.innerText = "Pontat";
-                dom.statusBadge.className = "px-3 py-1 rounded-full bg-slate-100 text-slate-500 font-bold";
-                dom.checkInBtn.classList.add('hidden');
-                dom.checkOutBtn.classList.add('hidden');
-                clearInterval(timerInterval);
-                dom.timerContainer.classList.add('hidden');
-            }
-        }
+        document.getElementById('checkInBtn').onclick = () => {
+            const name = localStorage.getItem('user_name');
+            const id = name.replace(/\s+/g, '_').toLowerCase();
+            set(ref(db, `${getTodayPath()}/${id}`), {
+                name, checkIn: serverTimestamp(), checkOut: null
+            });
+        };
 
-        function runTimer(start) {
-            dom.timerContainer.classList.remove('hidden');
-            clearInterval(timerInterval);
-            timerInterval = setInterval(() => {
-                const diff = Date.now() - start;
-                const h = Math.floor(diff/3600000), m = Math.floor((diff%3600000)/60000), s = Math.floor((diff%60000)/1000);
-                dom.timerDisplay.innerText = `${h.toString().padStart(2,'0')}:${m.toString().padStart(2,'0')}:${s.toString().padStart(2,'0')}`;
-            }, 1000);
-        }
+        document.getElementById('checkOutBtn').onclick = () => {
+            const name = localStorage.getItem('user_name');
+            const id = name.replace(/\s+/g, '_').toLowerCase();
+            set(ref(db, `${getTodayPath()}/${id}/checkOut`), serverTimestamp());
+        };
+
+        window.deleteEntry = (id) => {
+            if(confirm("Ștergi acest pontaj?")) {
+                remove(ref(db, `${getTodayPath()}/${id}`));
+            }
+        };
 
         const fmt = (ts) => ts ? new Date(ts).toLocaleTimeString('ro-RO', {hour:'2-digit', minute:'2-digit'}) : '--:--';
-        const dur = (s, e) => { if(!s || !e) return '...'; const d = e - s; return `${Math.floor(d/3600000)}h ${Math.floor((d%3600000)/60000)}m`; };
-
         init();
     </script>
 </body>
