@@ -17,37 +17,48 @@
   <div id="app"></div>
 
   <script type="module">
+    // Importăm și modulul de Autentificare
     import { initializeApp } from "https://www.gstatic.com/firebasejs/10.11.1/firebase-app.js";
     import { getFirestore, collection, onSnapshot, addDoc, updateDoc, doc, getDocs } from "https://www.gstatic.com/firebasejs/10.11.1/firebase-firestore.js";
+    import { getAuth, signInAnonymously, signInWithCustomToken } from "https://www.gstatic.com/firebasejs/10.11.1/firebase-auth.js";
 
-    // CHEIA FIREBASE CORECTATĂ (Am extras-o cu exactitate din ultima ta poză)
-    const firebaseConfig = {
-      apiKey: "AIzaSyAkTIrR4S1i5jqtP7D80RGxdGFevhkRpOE",
-      authDomain: "pontaj-staff.firebaseapp.com",
-      projectId: "pontaj-staff",
-      storageBucket: "pontaj-staff.firebasestorage.app",
-      messagingSenderId: "684456604284",
-      appId: "1:684456604284:web:b6a000722562624d49cff9"
-    };
+    // Setare Hibridă: Permite funcționarea atât aici în previzualizare cât și pe GitHub
+    const isCanvas = typeof __firebase_config !== 'undefined';
+    const firebaseConfig = isCanvas 
+      ? JSON.parse(__firebase_config) 
+      : {
+          apiKey: "AIzaSyAkTIrR4S1i5jqtP7D80RGxdGFevhkRpOE",
+          authDomain: "pontaj-staff.firebaseapp.com",
+          projectId: "pontaj-staff",
+          storageBucket: "pontaj-staff.firebasestorage.app",
+          messagingSenderId: "684456604284",
+          appId: "1:684456604284:web:b6a000722562624d49cff9"
+        };
 
     const app = initializeApp(firebaseConfig);
+    const auth = getAuth(app);
     const db = getFirestore(app);
-    const timesheetsRef = collection(db, 'pontaje');
+    
+    // Configurăm calea în funcție de mediul în care rulează
+    const canvasAppId = typeof __app_id !== 'undefined' ? __app_id : 'pontaj-app';
+    const timesheetsRef = isCanvas
+      ? collection(db, 'artifacts', canvasAppId, 'public', 'data', 'pontaje')
+      : collection(db, 'pontaje');
 
     let userName = localStorage.getItem('pontaj_username') || '';
     let records = [];
-    let isLoading = true; // Aplicația se încarcă în fundal
+    let isLoading = true;
     let loadingError = null;
-    let aiSummary = null; // Stocăm rezumatul AI
-    let isGeneratingAi = false; // Status generare AI
-    const apiKey = ""; // Cheia API Gemini (injectată automat de sistem)
+    let aiSummary = null; 
+    let isGeneratingAi = false; 
+    const apiKey = ""; 
     const appDiv = document.getElementById('app');
 
     function render() {
       // 1. ECRAN DE LOGARE (Apare INSTANTANEU!)
       if (!userName) {
         appDiv.innerHTML = `
-          <div class="min-h-[90vh] bg-gradient-to-br from-blue-50 to-indigo-100 flex items-center justify-center p-4">
+          <div class="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 flex items-center justify-center p-4">
             <div class="bg-white rounded-2xl shadow-xl p-8 w-full max-w-md text-center border-t-4 border-blue-600">
               <div class="w-16 h-16 bg-blue-100 text-blue-600 rounded-full flex items-center justify-center mx-auto mb-6">
                 <i class="fas fa-chart-line text-2xl"></i>
@@ -69,7 +80,7 @@
           if (val.length >= 2) {
             userName = val;
             localStorage.setItem('pontaj_username', userName);
-            render(); // Intrăm direct în bord!
+            render(); 
           }
         };
         return;
@@ -151,7 +162,7 @@
                 <button id="logoutBtn" class="text-sm text-red-500 font-bold hover:text-red-700 bg-red-50 px-3 py-1.5 rounded-lg border border-red-100 transition-colors">Schimbă User</button>
               </div>
             </div>
-            ${loadingError ? `<div class="bg-yellow-100 text-yellow-800 text-center py-2 text-sm font-semibold">${loadingError}</div>` : ''}
+            ${loadingError ? `<div class="bg-red-100 text-red-800 text-center py-2 text-sm font-semibold border-b border-red-200"><i class="fas fa-exclamation-triangle"></i> ${loadingError}</div>` : ''}
           </header>
 
           <main class="max-w-5xl mx-auto px-4 mt-8 space-y-6">
@@ -209,7 +220,7 @@
                 ${aiSummary ? `
                   <div class="mb-6 p-4 bg-gradient-to-r from-indigo-50 to-purple-50 rounded-xl border border-indigo-100 relative">
                     <button id="closeAiBtn" class="absolute top-2 right-2 text-indigo-400 hover:text-indigo-600"><i class="fas fa-times"></i></button>
-                    <h4 class="font-bold text-indigo-800 flex items-center gap-2 mb-2"><i class="fas fa-robot"></i> Rezumatul Echipei (Zilnic)</h4>
+                    <h4 class="font-bold text-indigo-800 flex items-center gap-2 mb-2"><i class="fas fa-robot"></i> Rezumatul Echipei</h4>
                     <p class="text-sm text-indigo-900 leading-relaxed">${aiSummary}</p>
                   </div>
                 ` : ''}
@@ -254,7 +265,13 @@
           try {
             document.getElementById('checkoutBtn').innerHTML = '<i class="fas fa-spinner fa-spin"></i> Se salvează...';
             document.getElementById('checkoutBtn').disabled = true;
-            await updateDoc(doc(db, 'pontaje', myActive.id), {
+            
+            // Folosim calea dinamică pentru a obține id-ul corect
+            const docRef = isCanvas
+              ? doc(db, 'artifacts', canvasAppId, 'public', 'data', 'pontaje', myActive.id)
+              : doc(db, 'pontaje', myActive.id);
+              
+            await updateDoc(docRef, {
               checkOut: new Date().toISOString(),
               status: 'completed'
             });
@@ -285,18 +302,13 @@
             const todayRecords = records.filter(r => r.date === todayStr);
             
             if(todayRecords.length === 0) {
-                aiSummary = "Nu există date de pontaj pentru ziua de azi pe care să le analizez.";
+                aiSummary = "Nu există date de pontaj pe care să le analizez.";
             } else {
-                // Transformăm datele din ziua curentă într-un text ușor de citit de către AI
                 const dataText = todayRecords.map(r => `${r.userName}: intrat la ${formatTime(r.checkIn)}, ieșit la ${r.checkOut ? formatTime(r.checkOut) : 'în curs'}`).join('; ');
-                
-                // Promptul către modelul de inteligență artificială
-                const prompt = `Ești un asistent de HR prietenos. Analizează aceste date de pontaj pentru astăzi: ${dataText}. Scrie un scurt rezumat de 3-4 propoziții în română. Spune câți oameni au lucrat, cine a fost cel mai matinal (a venit primul) și cine mai este încă la muncă dacă e cazul. Folosește un ton încurajator. Nu folosi formatare markdown (* sau #).`;
-                
+                const prompt = `Ești un asistent de HR prietenos. Analizează datele: ${dataText}. Scrie un scurt rezumat de 3 propoziții în română. Nu folosi markdown (* sau #).`;
                 const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key=${apiKey}`;
                 
                 let resultText = "Eroare la generare.";
-                // Sistem de reîncercare (Exponential Backoff) pentru a garanta răspunsul
                 for (let i = 0; i < 5; i++) {
                   try {
                     const response = await fetch(url, {
@@ -310,14 +322,13 @@
                     break;
                   } catch (error) {
                     if (i === 4) throw error;
-                    // Pauză progresivă: 1s, 2s, 4s, 8s, 16s
                     await new Promise(res => setTimeout(res, Math.pow(2, i) * 1000));
                   }
                 }
                 aiSummary = resultText;
             }
           } catch (e) {
-            aiSummary = "A apărut o problemă la comunicarea cu inteligența artificială.";
+            aiSummary = "Eroare la AI.";
           }
           
           isGeneratingAi = false;
@@ -335,11 +346,20 @@
     render();
 
     // ---------------------------------------------------------
-    // NOUA LOGICĂ DE CONECTARE (Forțăm afișarea erorii în loc de blocaj)
+    // NOUA LOGICĂ DE CONECTARE (Autentificare Invizibilă Hibridă)
     // ---------------------------------------------------------
     async function initDatabase() {
       try {
-        // Încercăm să aducem datele. Dacă e o greșeală, ne va da eroare instant!
+        // 1. Verificăm în ce mediu suntem și ne conectăm cu permisiunile corecte
+        if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
+          // Previzualizare (Canvas)
+          await signInWithCustomToken(auth, __initial_auth_token);
+        } else {
+          // GitHub Pages
+          await signInAnonymously(auth);
+        }
+
+        // 2. Acum încercăm să aducem datele cu permisiuni depline
         const snapshot = await getDocs(timesheetsRef);
         records = snapshot.docs.map(doc => ({id: doc.id, ...doc.data()}));
         records.sort((a,b) => new Date(b.checkIn) - new Date(a.checkIn));
@@ -347,7 +367,7 @@
         loadingError = null;
         render();
 
-        // Dacă a funcționat, ne abonăm la actualizări live
+        // 3. Ne abonăm la actualizări live
         onSnapshot(timesheetsRef, (snap) => {
           records = snap.docs.map(doc => ({id: doc.id, ...doc.data()}));
           records.sort((a,b) => new Date(b.checkIn) - new Date(a.checkIn));
