@@ -3,15 +3,20 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  
   <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+  <meta http-equiv="Pragma" content="no-cache">
+  <meta http-equiv="Expires" content="0">
+  
   <title>Pontaj Live</title>
   <script src="https://cdn.tailwindcss.com"></script>
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
 </head>
 <body class="bg-slate-50 text-gray-800 font-sans antialiased">
   
-  <div class="bg-blue-600 text-white text-center py-1.5 font-bold text-sm tracking-wide shadow-md">
-    <i class="fas fa-bolt"></i> Versiunea 3.1 (Conexiune Ultra-Rapidă)
+  <!-- BARA CARE CONFIRMĂ CĂ AI VERSIUNEA NOUĂ -->
+  <div class="bg-green-600 text-white text-center py-1.5 font-bold text-sm tracking-wide shadow-md">
+    <i class="fas fa-rocket"></i> Versiunea 5.0 (Acces Instant, Fără Așteptare)
   </div>
 
   <div id="app"></div>
@@ -20,7 +25,7 @@
     import { initializeApp } from "https://www.gstatic.com/firebasejs/10.11.1/firebase-app.js";
     import { getFirestore, collection, onSnapshot, addDoc, updateDoc, doc } from "https://www.gstatic.com/firebasejs/10.11.1/firebase-firestore.js";
 
-    // CHEIA CORECTATĂ LA LITERĂ (L mic în loc de I mare):
+    // CHEIA FIREBASE CORECTATĂ
     const firebaseConfig = {
       apiKey: "AIzaSyAkTlrR4Sli5jqtP7D80RGxdGFevhkRpOE",
       authDomain: "pontaj-staff.firebaseapp.com",
@@ -36,40 +41,20 @@
 
     let userName = localStorage.getItem('pontaj_username') || '';
     let records = [];
-    let isLoading = true;
+    let isLoading = true; // Aplicația se încarcă în fundal
     let loadingError = null;
     const appDiv = document.getElementById('app');
 
-    // Dacă durează mai mult de 5 secunde, aruncăm o eroare în loc să blocăm ecranul
+    // Dacă Firebase se mișcă extrem de încet (ex: semnal slab la net)
     setTimeout(() => {
-      if (isLoading) {
-        loadingError = "Conexiunea la baza de date a expirat. Verifică setările Firebase sau conexiunea la internet.";
+      if (isLoading && userName) {
+        loadingError = "Atenție: Conexiunea la net este slabă. Datele se aduc mai greu...";
         render();
       }
-    }, 5000);
+    }, 6000);
 
     function render() {
-      if (loadingError) {
-        appDiv.innerHTML = `
-          <div class="min-h-[90vh] bg-red-50 flex flex-col items-center justify-center p-4">
-            <div class="bg-white p-6 rounded-xl shadow-lg border-l-4 border-red-600 max-w-md w-full text-center">
-              <i class="fas fa-exclamation-circle text-4xl text-red-500 mb-4"></i>
-              <h2 class="text-xl font-bold text-red-600 mb-2">Eroare de Încărcare</h2>
-              <p class="text-gray-700 font-medium">${loadingError}</p>
-            </div>
-          </div>`;
-        return;
-      }
-
-      if (isLoading) {
-        appDiv.innerHTML = `
-          <div class="min-h-[90vh] flex flex-col items-center justify-center">
-            <i class="fas fa-spinner fa-spin text-4xl text-blue-600 mb-4"></i>
-            <h2 class="text-xl font-semibold">Se conectează la baza de date...</h2>
-          </div>`;
-        return;
-      }
-
+      // 1. ECRAN DE LOGARE (Apare INSTANTANEU!)
       if (!userName) {
         appDiv.innerHTML = `
           <div class="min-h-[90vh] bg-gradient-to-br from-blue-50 to-indigo-100 flex items-center justify-center p-4">
@@ -94,12 +79,13 @@
           if (val.length >= 2) {
             userName = val;
             localStorage.setItem('pontaj_username', userName);
-            render();
+            render(); // Intrăm direct în bord!
           }
         };
         return;
       }
 
+      // 2. Procesarea Datelor pentru Dashboard
       const myActive = records.find(r => r.userName.toLowerCase() === userName.toLowerCase() && r.status === 'active');
       const liveWorkers = records.filter(r => r.status === 'active');
       const historyByDate = records.reduce((acc, r) => {
@@ -108,6 +94,7 @@
         return acc;
       }, {});
 
+      // Construire Lista Live
       let liveWorkersHtml = liveWorkers.length === 0 
         ? '<p class="text-gray-500 text-center mt-6">Nimeni nu este pontat acum.</p>' 
         : liveWorkers.map(w => `
@@ -126,6 +113,7 @@
           </div>
         `).join('');
 
+      // Construire Tabel Istoric
       let historyHtml = Object.keys(historyByDate).length === 0 
         ? '<p class="text-gray-500 text-center mt-6">Nu există date salvate în istoric.</p>' 
         : Object.keys(historyByDate).sort((a,b) => new Date(b) - new Date(a)).map(date => `
@@ -160,6 +148,7 @@
           </div>
         `).join('');
 
+      // 3. Renderizare Dashboard (ÎNTOTDEAUNA INSTANT!)
       appDiv.innerHTML = `
         <div class="min-h-screen bg-slate-50 pb-12">
           <header class="bg-white shadow-sm border-b border-gray-200 sticky top-0 z-10">
@@ -172,11 +161,22 @@
                 <button id="logoutBtn" class="text-sm text-red-500 font-bold hover:text-red-700 bg-red-50 px-3 py-1.5 rounded-lg border border-red-100 transition-colors">Schimbă User</button>
               </div>
             </div>
+            ${loadingError ? `<div class="bg-yellow-100 text-yellow-800 text-center py-2 text-sm font-semibold">${loadingError}</div>` : ''}
           </header>
 
           <main class="max-w-5xl mx-auto px-4 mt-8 space-y-6">
             <section class="bg-white rounded-2xl shadow-sm border border-gray-200 p-8 text-center flex flex-col items-center justify-center min-h-[250px]">
-              ${myActive ? `
+              
+              <!-- Dacă se încarcă Firebase, arătăm asta rapid în loc de butoane -->
+              ${isLoading ? `
+                <div class="flex flex-col items-center justify-center">
+                  <i class="fas fa-spinner fa-spin text-4xl text-blue-500 mb-4"></i>
+                  <h2 class="text-xl font-bold text-gray-700">Se sincronizează datele...</h2>
+                </div>
+              ` : 
+              
+              /* Dacă s-a încărcat, arătăm butoanele! */
+              (myActive ? `
                 <div class="w-20 h-20 bg-green-100 text-green-600 rounded-full flex items-center justify-center mb-4">
                   <i class="fas fa-clock text-3xl"></i>
                 </div>
@@ -194,29 +194,30 @@
                 <button id="checkinBtn" class="w-full max-w-sm bg-green-500 hover:bg-green-600 text-white font-bold py-4 px-6 rounded-xl text-lg shadow-lg shadow-green-200 transition-transform active:scale-95 flex items-center justify-center gap-2">
                   <i class="fas fa-sign-in-alt"></i> Oferă Check-In (Intrare)
                 </button>
-              `}
+              `)}
             </section>
             
             <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
               <section class="lg:col-span-1 bg-white rounded-2xl shadow-sm border border-gray-200 p-5">
                 <div class="flex items-center justify-between border-b border-gray-100 pb-3 mb-4">
                   <h3 class="font-bold text-gray-800 flex items-center gap-2"><i class="fas fa-users text-blue-600"></i> Acum la muncă</h3>
-                  <span class="bg-blue-100 text-blue-700 text-xs font-bold px-2 py-1 rounded-full">${liveWorkers.length}</span>
+                  <span class="bg-blue-100 text-blue-700 text-xs font-bold px-2 py-1 rounded-full">${isLoading ? '...' : liveWorkers.length}</span>
                 </div>
-                ${liveWorkersHtml}
+                ${isLoading ? '<p class="text-gray-500 text-center py-4"><i class="fas fa-circle-notch fa-spin mr-2"></i> Se aduc datele...</p>' : liveWorkersHtml}
               </section>
 
               <section class="lg:col-span-2 bg-white rounded-2xl shadow-sm border border-gray-200 p-5">
                 <h3 class="font-bold text-gray-800 flex items-center gap-2 border-b border-gray-100 pb-3 mb-4">
                   <i class="far fa-calendar-alt text-slate-600"></i> Istoric complet pontaj
                 </h3>
-                ${historyHtml}
+                ${isLoading ? '<p class="text-gray-500 text-center py-4"><i class="fas fa-circle-notch fa-spin mr-2"></i> Se aduc datele...</p>' : historyHtml}
               </section>
             </div>
           </main>
         </div>
       `;
 
+      // Evenimente Butoane
       if (document.getElementById('logoutBtn')) {
         document.getElementById('logoutBtn').onclick = () => {
           localStorage.removeItem('pontaj_username');
@@ -238,7 +239,7 @@
               status: 'active'
             });
           } catch (e) { 
-            alert("A apărut o eroare de la Firebase. Detalii: " + e.message); 
+            alert("Eroare de la Firebase: " + e.message); 
             render(); 
           }
         };
@@ -254,24 +255,27 @@
               status: 'completed'
             });
           } catch (e) { 
-            alert("A apărut o eroare de la Firebase. Detalii: " + e.message); 
+            alert("Eroare de la Firebase: " + e.message); 
             render(); 
           }
         };
       }
     }
 
+    // Funcții de formatare a datei
     function formatTime(isoStr) { return new Date(isoStr).toLocaleTimeString('ro-RO', {hour:'2-digit', minute:'2-digit'}); }
     function formatDateLabel(isoStr) { return new Date(isoStr).toLocaleDateString('ro-RO', {weekday:'long', year:'numeric', month:'long', day:'numeric'}); }
     function getLocalDateString() { const d = new Date(); return d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0'); }
 
+    // Rulăm funcția care construiește aplicația INSTANT
     render();
 
-    // Ascultă după modificări în baza de date
+    // Conectăm baza de date pentru actualizări live în fundal
     onSnapshot(timesheetsRef, (snapshot) => {
       records = snapshot.docs.map(doc => ({id: doc.id, ...doc.data()}));
       records.sort((a,b) => new Date(b.checkIn) - new Date(a.checkIn));
       isLoading = false;
+      loadingError = null;
       render();
     }, (error) => {
       loadingError = error.message;
