@@ -14,20 +14,15 @@
 </head>
 <body class="bg-slate-50 text-gray-800 font-sans antialiased">
   
-  <!-- BARA CARE CONFIRMĂ CĂ AI VERSIUNEA NOUĂ -->
-  <div class="bg-green-600 text-white text-center py-1.5 font-bold text-sm tracking-wide shadow-md">
-    <i class="fas fa-rocket"></i> Versiunea 5.0 (Acces Instant, Fără Așteptare)
-  </div>
-
   <div id="app"></div>
 
   <script type="module">
     import { initializeApp } from "https://www.gstatic.com/firebasejs/10.11.1/firebase-app.js";
-    import { getFirestore, collection, onSnapshot, addDoc, updateDoc, doc } from "https://www.gstatic.com/firebasejs/10.11.1/firebase-firestore.js";
+    import { getFirestore, collection, onSnapshot, addDoc, updateDoc, doc, getDocs } from "https://www.gstatic.com/firebasejs/10.11.1/firebase-firestore.js";
 
-    // CHEIA FIREBASE CORECTATĂ
+    // CHEIA FIREBASE CORECTATĂ (Am extras-o cu exactitate din ultima ta poză)
     const firebaseConfig = {
-      apiKey: "AIzaSyAkTlrR4Sli5jqtP7D80RGxdGFevhkRpOE",
+      apiKey: "AIzaSyAkTIrR4S1i5jqtP7D80RGxdGFevhkRpOE",
       authDomain: "pontaj-staff.firebaseapp.com",
       projectId: "pontaj-staff",
       storageBucket: "pontaj-staff.firebasestorage.app",
@@ -47,14 +42,6 @@
     let isGeneratingAi = false; // Status generare AI
     const apiKey = ""; // Cheia API Gemini (injectată automat de sistem)
     const appDiv = document.getElementById('app');
-
-    // Dacă Firebase se mișcă extrem de încet (ex: semnal slab la net)
-    setTimeout(() => {
-      if (isLoading && userName) {
-        loadingError = "Atenție: Conexiunea la net este slabă. Datele se aduc mai greu...";
-        render();
-      }
-    }, 6000);
 
     function render() {
       // 1. ECRAN DE LOGARE (Apare INSTANTANEU!)
@@ -347,18 +334,35 @@
     // Rulăm funcția care construiește aplicația INSTANT
     render();
 
-    // Conectăm baza de date pentru actualizări live în fundal
-    onSnapshot(timesheetsRef, (snapshot) => {
-      records = snapshot.docs.map(doc => ({id: doc.id, ...doc.data()}));
-      records.sort((a,b) => new Date(b.checkIn) - new Date(a.checkIn));
-      isLoading = false;
-      loadingError = null;
-      render();
-    }, (error) => {
-      loadingError = error.message;
-      isLoading = false;
-      render();
-    });
+    // ---------------------------------------------------------
+    // NOUA LOGICĂ DE CONECTARE (Forțăm afișarea erorii în loc de blocaj)
+    // ---------------------------------------------------------
+    async function initDatabase() {
+      try {
+        // Încercăm să aducem datele. Dacă e o greșeală, ne va da eroare instant!
+        const snapshot = await getDocs(timesheetsRef);
+        records = snapshot.docs.map(doc => ({id: doc.id, ...doc.data()}));
+        records.sort((a,b) => new Date(b.checkIn) - new Date(a.checkIn));
+        isLoading = false;
+        loadingError = null;
+        render();
+
+        // Dacă a funcționat, ne abonăm la actualizări live
+        onSnapshot(timesheetsRef, (snap) => {
+          records = snap.docs.map(doc => ({id: doc.id, ...doc.data()}));
+          records.sort((a,b) => new Date(b.checkIn) - new Date(a.checkIn));
+          render();
+        });
+
+      } catch (error) {
+        console.error("Firebase Error:", error);
+        loadingError = "Baza de date a refuzat conexiunea: " + error.message;
+        isLoading = false;
+        render();
+      }
+    }
+
+    initDatabase();
 
   </script>
 </body>
